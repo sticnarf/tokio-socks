@@ -1,0 +1,6 @@
+[package]
+name = "tokio-socks"
+version = "0.1.0-dev"
+authors = ["Yilin Chen <sticnarf@gmail.com>"]
+
+[dependencies]
