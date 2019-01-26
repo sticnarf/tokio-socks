@@ -2,5 +2,10 @@
 name = "tokio-socks"
 version = "0.1.0-dev"
 authors = ["Yilin Chen <sticnarf@gmail.com>"]
+edition = "2018"
 
 [dependencies]
+futures = "0.1"
+tokio-tcp = "0.1"
+tokio-udp = "0.1"
+failure = "0.1"
