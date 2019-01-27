@@ -1,12 +1,17 @@
 use crate::{Authentication, Error, Result, TargetAddr, ToProxyAddrs, ToTargetAddr};
 use futures::{try_ready, Async, Future, Poll, Stream};
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::borrow::Cow;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_tcp::{ConnectFuture as TokioConnect, TcpStream};
+use derefable::Derefable;
 
-#[derive(Debug)]
+/// A SOCKS5 client.
+///
+/// For convenience, it can be dereferenced to `tokio_tcp::TcpStream`.
+#[derive(Debug, Derefable)]
 pub struct Socks5Stream {
+    #[deref(mutable)]
     tcp: TcpStream,
     target: TargetAddr<'static>,
 }
@@ -60,9 +65,7 @@ impl Socks5Stream {
     pub fn target_addr(&self) -> TargetAddr<'_> {
         match &self.target {
             TargetAddr::Ip(addr) => TargetAddr::Ip(*addr),
-            TargetAddr::Domain(domain, port) => {
-                TargetAddr::Domain(Cow::clone(domain), *port)
-            }
+            TargetAddr::Domain(domain, port) => TargetAddr::Domain(Cow::clone(domain), *port),
         }
     }
 }
@@ -174,8 +177,7 @@ where
                 },
                 ConnectState::Connected(ref mut opt) => {
                     let tcp = opt.as_mut().unwrap();
-                    let written = try_ready!(tcp.poll_write(&self.buf[self.ptr..self.len]));
-                    self.ptr += written;
+                    self.ptr += try_ready!(tcp.poll_write(&self.buf[self.ptr..self.len]));;
                     if self.ptr == self.len {
                         self.state = ConnectState::MethodSent(opt.take());
                         self.prepare_recv_method_selection();
@@ -183,8 +185,7 @@ where
                 }
                 ConnectState::MethodSent(ref mut opt) => {
                     let tcp = opt.as_mut().unwrap();
-                    let read = try_ready!(tcp.poll_read(&mut self.buf[self.ptr..self.len]));
-                    self.ptr += read;
+                    self.ptr += try_ready!(tcp.poll_read(&mut self.buf[self.ptr..self.len]));
                     if self.ptr == self.len {
                         if self.buf[0] != 0x05 {
                             Err(Error::InvalidResponseVersion)?
@@ -210,8 +211,7 @@ where
                 }
                 ConnectState::SendRequest(ref mut opt) => {
                     let tcp = opt.as_mut().unwrap();
-                    let written = try_ready!(tcp.poll_write(&self.buf[self.ptr..self.len]));
-                    self.ptr += written;
+                    self.ptr += try_ready!(tcp.poll_write(&self.buf[self.ptr..self.len]));
                     if self.ptr == self.len {
                         self.state = ConnectState::RequestSent(opt.take());
                         self.prepare_recv_reply();
@@ -219,8 +219,7 @@ where
                 }
                 ConnectState::RequestSent(ref mut opt) => {
                     let tcp = opt.as_mut().unwrap();
-                    let read = try_ready!(tcp.poll_read(&mut self.buf[self.ptr..self.len]));
-                    self.ptr += read;
+                    self.ptr += try_ready!(tcp.poll_read(&mut self.buf[self.ptr..self.len]));
                     if self.ptr == self.len {
                         if self.buf[0] != 0x05 {
                             Err(Error::InvalidResponseVersion)?
@@ -262,8 +261,7 @@ where
                 }
                 ConnectState::PrepareReadAddress(ref mut opt) => {
                     let tcp = opt.as_mut().unwrap();
-                    let read = try_ready!(tcp.poll_read(&mut self.buf[self.ptr..self.len]));
-                    self.ptr += read;
+                    self.ptr += try_ready!(tcp.poll_read(&mut self.buf[self.ptr..self.len]));
                     if self.ptr == self.len {
                         self.len += self.buf[4] as usize + 2;
                         self.state = ConnectState::ReadAddress(opt.take());
@@ -271,8 +269,7 @@ where
                 }
                 ConnectState::ReadAddress(ref mut opt) => {
                     let tcp = opt.as_mut().unwrap();
-                    let read = try_ready!(tcp.poll_read(&mut self.buf[self.ptr..self.len]));
-                    self.ptr += read;
+                    self.ptr += try_ready!(tcp.poll_read(&mut self.buf[self.ptr..self.len]));
                     if self.ptr == self.len {
                         let target: TargetAddr<'static> = match self.buf[3] {
                             // IPv4
