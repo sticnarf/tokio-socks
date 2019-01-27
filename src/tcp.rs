@@ -1,7 +1,7 @@
 use crate::{Authentication, Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
 use derefable::Derefable;
 use futures::{try_ready, Async, Future, Poll, Stream};
-use std::borrow::Cow;
+use std::borrow::Borrow;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_tcp::{ConnectFuture as TokioConnect, TcpStream};
@@ -62,10 +62,13 @@ impl Socks5Stream {
     }
 
     /// Returns the target address that the proxy server connects to.
-    pub fn target_addr(&self) -> TargetAddr<'_> {
+    pub fn target_addr(&self) -> TargetAddr {
         match &self.target {
             TargetAddr::Ip(addr) => TargetAddr::Ip(*addr),
-            TargetAddr::Domain(domain, port) => TargetAddr::Domain(Cow::clone(domain), *port),
+            TargetAddr::Domain(domain, port) => {
+                let domain: &str = domain.borrow();
+                TargetAddr::Domain(domain.into(), *port)
+            }
         }
     }
 }

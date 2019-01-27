@@ -39,12 +39,11 @@ fn main() {
         .get(Uri::from_static("http://httpbin.org/ip"))
         .and_then(|res| {
             println!("Response: {}", res.status());
-            res.into_body()
-                .for_each(|chunk| {
-                    stdout()
-                        .write_all(&chunk)
-                        .map_err(|e| panic!("example expects stdout is open, error={}", e))
-                })
+            res.into_body().for_each(|chunk| {
+                stdout()
+                    .write_all(&chunk)
+                    .map_err(|e| panic!("example expects stdout is open, error={}", e))
+            })
         })
         .map_err(|err| {
             println!("Error: {}", err);

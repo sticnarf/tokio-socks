@@ -64,6 +64,18 @@ pub enum TargetAddr<'a> {
     Domain(Cow<'a, str>, u16),
 }
 
+impl<'a> TargetAddr<'a> {
+    /// Creates owned `TargetAddr` by cloning. It is usually used to eliminate the lifetime bound.
+    pub fn to_owned(&self) -> TargetAddr<'static> {
+        match self {
+            TargetAddr::Ip(addr) => TargetAddr::Ip(*addr),
+            TargetAddr::Domain(domain, port) => {
+                TargetAddr::Domain(String::from(domain.clone()).into(), *port)
+            }
+        }
+    }
+}
+
 /// A trait for objects that can be converted to `TargetAddr`.
 pub trait IntoTargetAddr<'a> {
     /// Converts the value of self to a `TargetAddr`.
