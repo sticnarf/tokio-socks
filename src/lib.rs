@@ -1,4 +1,5 @@
 use futures::stream::{self, IterOk, Once, Stream};
+use std::borrow::Cow;
 use std::iter::Cloned;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::slice::Iter;
@@ -60,7 +61,7 @@ pub enum TargetAddr<'a> {
     /// Connect to a fully-qualified domain name.
     ///
     /// The domain name will be passed along to the proxy server and DNS lookup will happen there.
-    Domain(&'a str, u16),
+    Domain(Cow<'a, str>, u16),
 }
 
 /// A trait for objects that can be converted to `TargetAddr`.
@@ -100,7 +101,7 @@ impl<'a> ToTargetAddr<'a> for (&'a str, u16) {
         }
         // TODO: Should we validate the domain format here?
 
-        Ok(TargetAddr::Domain(self.0, self.1))
+        Ok(TargetAddr::Domain(self.0.into(), self.1))
     }
 }
 
@@ -140,6 +141,15 @@ enum Authentication<'a> {
         password: &'a str,
     },
     None,
+}
+
+impl<'a> Authentication<'a> {
+    fn id(&self) -> u8 {
+        match self {
+            Authentication::Password { .. } => 0x02,
+            Authentication::None => 0x00,
+        }
+    }
 }
 
 mod error;
@@ -225,7 +235,10 @@ mod tests {
     fn converts_domain_to_target_addr() -> Result<()> {
         let domain = "www.example.com:80";
         let res = to_target_addr(domain)?;
-        assert_eq!(TargetAddr::Domain("www.example.com", 80), res);
+        assert_eq!(
+            TargetAddr::Domain(Cow::Borrowed("www.example.com"), 80),
+            res
+        );
         Ok(())
     }
 
@@ -233,7 +246,10 @@ mod tests {
     fn converts_domain_and_port_to_target_addr() -> Result<()> {
         let domain = "www.example.com";
         let res = to_target_addr((domain, 80))?;
-        assert_eq!(TargetAddr::Domain("www.example.com", 80), res);
+        assert_eq!(
+            TargetAddr::Domain(Cow::Borrowed("www.example.com"), 80),
+            res
+        );
         Ok(())
     }
 
