@@ -57,7 +57,7 @@ pub enum TargetAddr<'a> {
     /// Connect to an IP address.
     Ip(SocketAddr),
 
-    /// Connect to a fully qualified domain name.
+    /// Connect to a fully-qualified domain name.
     ///
     /// The domain name will be passed along to the proxy server and DNS lookup will happen there.
     Domain(&'a str, u16),
@@ -88,14 +88,38 @@ trivial_impl_to_target_addr!(SocketAddrV6);
 
 impl<'a> ToTargetAddr<'a> for (&'a str, u16) {
     fn to_target_addr<'b>(&'b self) -> Result<TargetAddr<'a>> {
-        // TODO: Validate domain
+        // Try IP address first
+        if let Ok(addr) = self.0.parse::<IpAddr>() {
+            return (addr, self.1).to_target_addr();
+        }
+
+        // Treat as domain name
+        let len = self.0.as_bytes().len();
+        if len > 255 {
+            return Err(Error::InvalidTargetAddress("overlong domain"));
+        }
+        // TODO: Should we validate the domain format here?
+
         Ok(TargetAddr::Domain(self.0, self.1))
     }
 }
 
 impl<'a> ToTargetAddr<'a> for &'a str {
     fn to_target_addr<'b>(&'b self) -> Result<TargetAddr<'a>> {
-        unimplemented!()
+        // Try IP address first
+        if let Ok(addr) = self.parse::<SocketAddr>() {
+            return addr.to_target_addr();
+        }
+
+        let mut parts_iter = self.rsplitn(2, ':');
+        let port: u16 = parts_iter
+            .next()
+            .and_then(|port_str| port_str.parse().ok())
+            .ok_or(Error::InvalidTargetAddress("invalid address format"))?;
+        let domain = parts_iter
+            .next()
+            .ok_or(Error::InvalidTargetAddress("invalid address format"))?;
+        (domain, port).to_target_addr()
     }
 }
 
@@ -158,7 +182,7 @@ mod tests {
 
     fn to_target_addr<'a, T>(t: T) -> Result<TargetAddr<'a>>
     where
-        T: ToTargetAddr<'a> + 'a,
+        T: ToTargetAddr<'a>,
     {
         t.to_target_addr()
     }
@@ -180,7 +204,52 @@ mod tests {
     }
 
     #[test]
+    fn converts_socket_addr_str_to_target_addr() -> Result<()> {
+        let addr = SocketAddr::from(([1, 1, 1, 1], 443));
+        let ip_str = format!("{}", addr);
+        let res = to_target_addr(ip_str.as_str())?;
+        assert_eq!(TargetAddr::Ip(addr), res);
+        Ok(())
+    }
+
+    #[test]
+    fn converts_ip_str_and_port_target_addr() -> Result<()> {
+        let addr = SocketAddr::from(([1, 1, 1, 1], 443));
+        let ip_str = format!("{}", addr.ip());
+        let res = to_target_addr((ip_str.as_str(), addr.port()))?;
+        assert_eq!(TargetAddr::Ip(addr), res);
+        Ok(())
+    }
+
+    #[test]
     fn converts_domain_to_target_addr() -> Result<()> {
-        unimplemented!()
+        let domain = "www.example.com:80";
+        let res = to_target_addr(domain)?;
+        assert_eq!(TargetAddr::Domain("www.example.com", 80), res);
+        Ok(())
+    }
+
+    #[test]
+    fn converts_domain_and_port_to_target_addr() -> Result<()> {
+        let domain = "www.example.com";
+        let res = to_target_addr((domain, 80))?;
+        assert_eq!(TargetAddr::Domain("www.example.com", 80), res);
+        Ok(())
+    }
+
+    #[test]
+    fn overlong_domain_to_target_addr_should_fail() {
+        let domain = format!("www.{:a<1$}.com:80", 'a', 300);
+        assert!(to_target_addr(domain.as_str()).is_err());
+        let domain = format!("www.{:a<1$}.com", 'a', 300);
+        assert!(to_target_addr((domain.as_str(), 80)).is_err());
+    }
+
+    #[test]
+    fn addr_with_invalid_port_to_target_addr_should_fail() {
+        let addr = "[ffff::1]:65536";
+        assert!(to_target_addr(addr).is_err());
+        let addr = "www.example.com:65536";
+        assert!(to_target_addr(addr).is_err());
     }
 }

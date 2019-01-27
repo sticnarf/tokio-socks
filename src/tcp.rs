@@ -1,31 +1,66 @@
-use crate::{Authentication, Error};
-use futures::{Future, Poll};
+use crate::{Authentication, Error, Result, TargetAddr, ToProxyAddrs, ToTargetAddr};
+use futures::{Future, Poll, Stream};
+use std::net::SocketAddr;
 use tokio_tcp::TcpStream;
 
-struct ConnectFuture<'a> {
+pub struct ConnectFuture<'a, 't, S>
+where
+    S: Stream<Item = SocketAddr, Error = Error>,
+{
     auth: Authentication<'a>,
+    proxy: S,
+    target: TargetAddr<'t>,
 }
 
-struct Socks5Stream {
+pub struct Socks5Stream {
     socket: TcpStream,
 }
 
 impl Socks5Stream {
-    fn connect<P, T>(proxy: P, target: T) -> ConnectFuture<'static> {
-        unimplemented!()
+    /// Connects to a target server through a SOCKS5 proxy.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to `TargetAddr`.
+    pub fn connect<'t, P, T>(proxy: P, target: T) -> Result<ConnectFuture<'static, 't, P::Output>>
+    where
+        P: ToProxyAddrs,
+        T: ToTargetAddr<'t>,
+    {
+        Ok(ConnectFuture {
+            auth: Authentication::None,
+            proxy: proxy.to_proxy_addrs(),
+            target: target.to_target_addr()?,
+        })
     }
 
-    fn connect_with_password<'a, P, T>(
+    /// Connects to a target server through a SOCKS5 proxy using given username and password.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to `TargetAddr`.
+    pub fn connect_with_password<'a, 't, P, T>(
         proxy: P,
         target: T,
         username: &'a str,
         password: &'a str,
-    ) -> ConnectFuture<'a> {
-        unimplemented!()
+    ) -> Result<ConnectFuture<'a, 't, P::Output>>
+    where
+        P: ToProxyAddrs,
+        T: ToTargetAddr<'t>,
+    {
+        Ok(ConnectFuture {
+            auth: Authentication::Password { username, password },
+            proxy: proxy.to_proxy_addrs(),
+            target: target.to_target_addr()?,
+        })
     }
 }
 
-impl<'a> Future for ConnectFuture<'a> {
+impl<'a, 't, S> Future for ConnectFuture<'a, 't, S>
+where
+    S: Stream<Item = SocketAddr, Error = Error>,
+{
     type Item = Socks5Stream;
     type Error = Error;
 
