@@ -65,33 +65,33 @@ pub enum TargetAddr<'a> {
 }
 
 /// A trait for objects that can be converted to `TargetAddr`.
-pub trait ToTargetAddr<'a> {
+pub trait IntoTargetAddr<'a> {
     /// Converts the value of self to a `TargetAddr`.
-    fn to_target_addr<'b>(&'b self) -> Result<TargetAddr<'a>>;
+    fn into_target_addr(self) -> Result<TargetAddr<'a>>;
 }
 
-macro_rules! trivial_impl_to_target_addr {
+macro_rules! trivial_impl_into_target_addr {
     ($t: ty) => {
-        impl<'a> ToTargetAddr<'a> for $t {
-            fn to_target_addr<'b>(&'b self) -> Result<TargetAddr<'a>> {
-                Ok(TargetAddr::Ip(SocketAddr::from(*self)))
+        impl<'a> IntoTargetAddr<'a> for $t {
+            fn into_target_addr(self) -> Result<TargetAddr<'a>> {
+                Ok(TargetAddr::Ip(SocketAddr::from(self)))
             }
         }
     };
 }
 
-trivial_impl_to_target_addr!(SocketAddr);
-trivial_impl_to_target_addr!((IpAddr, u16));
-trivial_impl_to_target_addr!((Ipv4Addr, u16));
-trivial_impl_to_target_addr!((Ipv6Addr, u16));
-trivial_impl_to_target_addr!(SocketAddrV4);
-trivial_impl_to_target_addr!(SocketAddrV6);
+trivial_impl_into_target_addr!(SocketAddr);
+trivial_impl_into_target_addr!((IpAddr, u16));
+trivial_impl_into_target_addr!((Ipv4Addr, u16));
+trivial_impl_into_target_addr!((Ipv6Addr, u16));
+trivial_impl_into_target_addr!(SocketAddrV4);
+trivial_impl_into_target_addr!(SocketAddrV6);
 
-impl<'a> ToTargetAddr<'a> for (&'a str, u16) {
-    fn to_target_addr<'b>(&'b self) -> Result<TargetAddr<'a>> {
+impl<'a> IntoTargetAddr<'a> for (&'a str, u16) {
+    fn into_target_addr(self) -> Result<TargetAddr<'a>> {
         // Try IP address first
         if let Ok(addr) = self.0.parse::<IpAddr>() {
-            return (addr, self.1).to_target_addr();
+            return (addr, self.1).into_target_addr();
         }
 
         // Treat as domain name
@@ -105,11 +105,11 @@ impl<'a> ToTargetAddr<'a> for (&'a str, u16) {
     }
 }
 
-impl<'a> ToTargetAddr<'a> for &'a str {
-    fn to_target_addr<'b>(&'b self) -> Result<TargetAddr<'a>> {
+impl<'a> IntoTargetAddr<'a> for &'a str {
+    fn into_target_addr(self) -> Result<TargetAddr<'a>> {
         // Try IP address first
         if let Ok(addr) = self.parse::<SocketAddr>() {
-            return addr.to_target_addr();
+            return addr.into_target_addr();
         }
 
         let mut parts_iter = self.rsplitn(2, ':');
@@ -120,16 +120,27 @@ impl<'a> ToTargetAddr<'a> for &'a str {
         let domain = parts_iter
             .next()
             .ok_or(Error::InvalidTargetAddress("invalid address format"))?;
-        (domain, port).to_target_addr()
+        (domain, port).into_target_addr()
     }
 }
 
-impl<'a, T> ToTargetAddr<'a> for &'a T
+impl IntoTargetAddr<'static> for (String, u16) {
+    fn into_target_addr(self) -> Result<TargetAddr<'static>> {
+        let addr = (self.0.as_str(), self.1).into_target_addr()?;
+        if let TargetAddr::Ip(addr) = addr {
+            Ok(TargetAddr::Ip(addr))
+        } else {
+            Ok(TargetAddr::Domain(self.0.into(), self.1))
+        }
+    }
+}
+
+impl<'a, T> IntoTargetAddr<'a> for &'a T
 where
-    T: ToTargetAddr<'a> + ?Sized,
+    T: IntoTargetAddr<'a> + Copy,
 {
-    fn to_target_addr<'b>(&'b self) -> Result<TargetAddr<'a>> {
-        (**self).to_target_addr()
+    fn into_target_addr(self) -> Result<TargetAddr<'a>> {
+        (*self).into_target_addr()
     }
 }
 
@@ -190,17 +201,17 @@ mod tests {
         Ok(())
     }
 
-    fn to_target_addr<'a, T>(t: T) -> Result<TargetAddr<'a>>
+    fn into_target_addr<'a, T>(t: T) -> Result<TargetAddr<'a>>
     where
-        T: ToTargetAddr<'a>,
+        T: IntoTargetAddr<'a>,
     {
-        t.to_target_addr()
+        t.into_target_addr()
     }
 
     #[test]
     fn converts_socket_addr_to_target_addr() -> Result<()> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
-        let res = to_target_addr(addr)?;
+        let res = into_target_addr(addr)?;
         assert_eq!(TargetAddr::Ip(addr), res);
         Ok(())
     }
@@ -208,7 +219,7 @@ mod tests {
     #[test]
     fn converts_socket_addr_ref_to_target_addr() -> Result<()> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
-        let res = to_target_addr(&addr)?;
+        let res = into_target_addr(&addr)?;
         assert_eq!(TargetAddr::Ip(addr), res);
         Ok(())
     }
@@ -217,7 +228,7 @@ mod tests {
     fn converts_socket_addr_str_to_target_addr() -> Result<()> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
         let ip_str = format!("{}", addr);
-        let res = to_target_addr(ip_str.as_str())?;
+        let res = into_target_addr(ip_str.as_str())?;
         assert_eq!(TargetAddr::Ip(addr), res);
         Ok(())
     }
@@ -226,7 +237,7 @@ mod tests {
     fn converts_ip_str_and_port_target_addr() -> Result<()> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
         let ip_str = format!("{}", addr.ip());
-        let res = to_target_addr((ip_str.as_str(), addr.port()))?;
+        let res = into_target_addr((ip_str.as_str(), addr.port()))?;
         assert_eq!(TargetAddr::Ip(addr), res);
         Ok(())
     }
@@ -234,7 +245,7 @@ mod tests {
     #[test]
     fn converts_domain_to_target_addr() -> Result<()> {
         let domain = "www.example.com:80";
-        let res = to_target_addr(domain)?;
+        let res = into_target_addr(domain)?;
         assert_eq!(
             TargetAddr::Domain(Cow::Borrowed("www.example.com"), 80),
             res
@@ -245,7 +256,7 @@ mod tests {
     #[test]
     fn converts_domain_and_port_to_target_addr() -> Result<()> {
         let domain = "www.example.com";
-        let res = to_target_addr((domain, 80))?;
+        let res = into_target_addr((domain, 80))?;
         assert_eq!(
             TargetAddr::Domain(Cow::Borrowed("www.example.com"), 80),
             res
@@ -256,16 +267,16 @@ mod tests {
     #[test]
     fn overlong_domain_to_target_addr_should_fail() {
         let domain = format!("www.{:a<1$}.com:80", 'a', 300);
-        assert!(to_target_addr(domain.as_str()).is_err());
+        assert!(into_target_addr(domain.as_str()).is_err());
         let domain = format!("www.{:a<1$}.com", 'a', 300);
-        assert!(to_target_addr((domain.as_str(), 80)).is_err());
+        assert!(into_target_addr((domain.as_str(), 80)).is_err());
     }
 
     #[test]
     fn addr_with_invalid_port_to_target_addr_should_fail() {
         let addr = "[ffff::1]:65536";
-        assert!(to_target_addr(addr).is_err());
+        assert!(into_target_addr(addr).is_err());
         let addr = "www.example.com:65536";
-        assert!(to_target_addr(addr).is_err());
+        assert!(into_target_addr(addr).is_err());
     }
 }

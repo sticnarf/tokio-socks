@@ -1,10 +1,10 @@
-use crate::{Authentication, Error, Result, TargetAddr, ToProxyAddrs, ToTargetAddr};
+use crate::{Authentication, Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
+use derefable::Derefable;
 use futures::{try_ready, Async, Future, Poll, Stream};
 use std::borrow::Cow;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_tcp::{ConnectFuture as TokioConnect, TcpStream};
-use derefable::Derefable;
 
 /// A SOCKS5 client.
 ///
@@ -25,12 +25,12 @@ impl Socks5Stream {
     pub fn connect<'t, P, T>(proxy: P, target: T) -> Result<ConnectFuture<'static, 't, P::Output>>
     where
         P: ToProxyAddrs,
-        T: ToTargetAddr<'t>,
+        T: IntoTargetAddr<'t>,
     {
         Ok(ConnectFuture::new(
             Authentication::None,
             proxy.to_proxy_addrs(),
-            target.to_target_addr()?,
+            target.into_target_addr()?,
         ))
     }
 
@@ -47,12 +47,12 @@ impl Socks5Stream {
     ) -> Result<ConnectFuture<'a, 't, P::Output>>
     where
         P: ToProxyAddrs,
-        T: ToTargetAddr<'t>,
+        T: IntoTargetAddr<'t>,
     {
         Ok(ConnectFuture::new(
             Authentication::Password { username, password },
             proxy.to_proxy_addrs(),
-            target.to_target_addr()?,
+            target.into_target_addr()?,
         ))
     }
 
@@ -278,7 +278,7 @@ where
                                 ip[..].copy_from_slice(&self.buf[4..8]);
                                 let ip = Ipv4Addr::from(ip);
                                 let port = read_port(&self.buf[8..10]);
-                                (ip, port).to_target_addr()?
+                                (ip, port).into_target_addr()?
                             }
                             // IPv6
                             0x04 => {
@@ -286,7 +286,7 @@ where
                                 ip[..].copy_from_slice(&self.buf[4..20]);
                                 let ip = Ipv6Addr::from(ip);
                                 let port = read_port(&self.buf[20..22]);
-                                (ip, port).to_target_addr()?
+                                (ip, port).into_target_addr()?
                             }
                             // Domain
                             0x03 => {
