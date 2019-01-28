@@ -49,6 +49,18 @@ impl Socks5Stream {
         P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
     {
+        let username_len = username.as_bytes().len();
+        if username_len < 1 || username_len > 255 {
+            Err(Error::InvalidAuthValues(
+                "username length should between 1 to 255",
+            ))?
+        }
+        let password_len = password.as_bytes().len();
+        if password_len < 1 || password_len > 255 {
+            Err(Error::InvalidAuthValues(
+                "password length should between 1 to 255",
+            ))?
+        }
         Ok(ConnectFuture::new(
             Authentication::Password { username, password },
             proxy.to_proxy_addrs(),
@@ -111,13 +123,36 @@ where
                 self.len = 3;
             }
             Authentication::Password { .. } => {
-                self.buf[1..4].copy_from_slice(&[1, 0x00, 0x02]);
+                self.buf[1..4].copy_from_slice(&[2, 0x00, 0x02]);
                 self.len = 4;
             }
         }
     }
 
     fn prepare_recv_method_selection(&mut self) {
+        self.ptr = 0;
+        self.len = 2;
+    }
+
+    fn prepare_send_password_auth(&mut self) {
+        if let Authentication::Password { username, password } = self.auth {
+            self.ptr = 0;
+            self.buf[0] = 0x01;
+            let username_bytes = username.as_bytes();
+            let username_len = username_bytes.len();
+            self.buf[1] = username_len as u8;
+            self.buf[2..(2 + username_len)].copy_from_slice(username_bytes);
+            let password_bytes = password.as_bytes();
+            let password_len = password_bytes.len();
+            self.len = 3 + username_len + password_len;
+            self.buf[(2 + username_len)] = password_len as u8;
+            self.buf[(3 + username_len)..self.len].copy_from_slice(password_bytes);
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn prepare_recv_password_auth(&mut self) {
         self.ptr = 0;
         self.len = 2;
     }
@@ -176,11 +211,12 @@ where
                         self.prepare_send_method_selection()
                     }
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    Err(e) => self.state = ConnectState::Uninitialized,
+                    Err(_e) => self.state = ConnectState::Uninitialized,
                 },
                 ConnectState::Connected(ref mut opt) => {
                     let tcp = opt.as_mut().unwrap();
-                    self.ptr += try_ready!(tcp.poll_write(&self.buf[self.ptr..self.len]));;
+                    self.ptr += try_ready!(tcp.poll_write(&self.buf[self.ptr..self.len]));
+                    ;
                     if self.ptr == self.len {
                         self.state = ConnectState::MethodSent(opt.take());
                         self.prepare_recv_method_selection();
@@ -196,17 +232,35 @@ where
                         match self.buf[1] {
                             0x00 => self.state = ConnectState::PrepareRequest(opt.take()),
                             0xff => Err(Error::NoAcceptableAuthMethods)?,
+                            0x02 => {
+                                self.state = ConnectState::PasswordAuth(opt.take());
+                                self.prepare_send_password_auth();
+                            },
                             m if m != self.auth.id() => Err(Error::UnknownAuthMethod)?,
-                            _ => self.state = ConnectState::SubNegotiation(opt.take()),
+                            _ => unimplemented!(),
                         }
                     }
                 }
-                ConnectState::SubNegotiation(ref mut opt) => {
-                    match self.auth {
-                        Authentication::Password { username, password } => unimplemented!(),
-                        Authentication::None => unreachable!(),
+                ConnectState::PasswordAuth(ref mut opt) => {
+                    let tcp = opt.as_mut().unwrap();
+                    self.ptr += try_ready!(tcp.poll_write(&self.buf[self.ptr..self.len]));
+                    if self.ptr == self.len {
+                        self.state = ConnectState::PasswordAuthSent(opt.take());
+                        self.prepare_recv_password_auth();
                     }
-                    self.state = ConnectState::PrepareRequest(opt.take());
+                }
+                ConnectState::PasswordAuthSent(ref mut opt) => {
+                    let tcp = opt.as_mut().unwrap();
+                    self.ptr += try_ready!(tcp.poll_read(&mut self.buf[self.ptr..self.len]));
+                    if self.ptr == self.len {
+                        if self.buf[0] != 0x01 {
+                            Err(Error::InvalidResponseVersion)?
+                        }
+                        if self.buf[1] != 0x00 {
+                            Err(Error::PasswordAuthFailure(self.buf[1]))?
+                        }
+                        self.state = ConnectState::PrepareRequest(opt.take());
+                    }
                 }
                 ConnectState::PrepareRequest(ref mut opt) => {
                     self.state = ConnectState::SendRequest(opt.take());
@@ -319,7 +373,8 @@ enum ConnectState {
     Created(TokioConnect),
     Connected(Option<TcpStream>),
     MethodSent(Option<TcpStream>),
-    SubNegotiation(Option<TcpStream>),
+    PasswordAuth(Option<TcpStream>),
+    PasswordAuthSent(Option<TcpStream>),
     PrepareRequest(Option<TcpStream>),
     SendRequest(Option<TcpStream>),
     RequestSent(Option<TcpStream>),

@@ -9,7 +9,7 @@ pub enum Error {
     /// Failure when parsing a `String`.
     #[fail(display = "{}", _0)]
     ParseError(#[cause] std::string::ParseError),
-    /// Failure due to invalid target address.
+    /// Failure due to invalid target address. It contains the detailed error message.
     #[fail(display = "Target address is invalid: {}", _0)]
     InvalidTargetAddress(&'static str),
     /// Proxy server unreachable.
@@ -57,6 +57,12 @@ pub enum Error {
     /// Unknown address type
     #[fail(display = "Unknown address type")]
     UnknownAddressType,
+    /// Invalid authentication values. It contains the detailed error message.
+    #[fail(display = "Invalid auth values: {}", _0)]
+    InvalidAuthValues(&'static str),
+    /// Password auth failure
+    #[fail(display = "Password auth failure, code: {}", _0)]
+    PasswordAuthFailure(u8),
 }
 
 impl From<std::io::Error> for Error {
