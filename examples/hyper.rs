@@ -32,7 +32,7 @@ impl Connect for Connector {
 
 fn main() {
     let connector = Connector {
-        proxy: SocketAddr::from(([127, 0, 0, 1], 1086)),
+        proxy: SocketAddr::from(([127, 0, 0, 1], 1080)),
     };
     let client = Client::builder().build::<_, hyper::Body>(connector);
     let future = client

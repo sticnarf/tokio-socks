@@ -334,7 +334,7 @@ where
                                 let mut ip = [0; 4];
                                 ip[..].copy_from_slice(&self.buf[4..8]);
                                 let ip = Ipv4Addr::from(ip);
-                                let port = read_port(&self.buf[8..10]);
+                                let port = u16::from_be_bytes([self.buf[8], self.buf[9]]);
                                 (ip, port).into_target_addr()?
                             }
                             // IPv6
@@ -342,7 +342,7 @@ where
                                 let mut ip = [0; 16];
                                 ip[..].copy_from_slice(&self.buf[4..20]);
                                 let ip = Ipv6Addr::from(ip);
-                                let port = read_port(&self.buf[20..22]);
+                                let port = u16::from_be_bytes([self.buf[20], self.buf[21]]);
                                 (ip, port).into_target_addr()?
                             }
                             // Domain
@@ -380,9 +380,4 @@ enum ConnectState {
     RequestSent(Option<TcpStream>),
     PrepareReadAddress(Option<TcpStream>),
     ReadAddress(Option<TcpStream>),
-}
-
-fn read_port(buf: &[u8]) -> u16 {
-    assert_eq!(buf.len(), 2);
-    u16::from_be_bytes([buf[0], buf[1]])
 }
