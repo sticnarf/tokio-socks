@@ -1,8 +1,15 @@
-use futures::stream::{self, IterOk, Once, Stream};
-use std::borrow::Cow;
-use std::iter::Cloned;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::slice::Iter;
+use futures::{
+    stream::{self, IterOk, Once, Stream},
+    Poll, Async,
+};
+use std::{
+    borrow::Cow,
+    io,
+    iter::Cloned,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
+    slice::Iter,
+    vec,
+};
 
 pub use error::Error;
 use error::Result;
@@ -12,7 +19,7 @@ use error::Result;
 ///
 /// This trait is similar to `std::net::ToSocketAddrs` but allows asynchronous name resolution.
 pub trait ToProxyAddrs {
-    type Output: Stream<Item = SocketAddr, Error = Error>;
+    type Output: Stream<Item=SocketAddr, Error=Error>;
 
     fn to_proxy_addrs(&self) -> Self::Output;
 }
@@ -44,11 +51,45 @@ impl<'a> ToProxyAddrs for &'a [SocketAddr] {
     }
 }
 
+impl ToProxyAddrs for str {
+    type Output = ProxyAddrsStream;
+
+    fn to_proxy_addrs(&self) -> Self::Output {
+        ProxyAddrsStream(Some(self.to_socket_addrs()))
+    }
+}
+
+impl<'a> ToProxyAddrs for (&'a str, u16) {
+    type Output = ProxyAddrsStream;
+
+    fn to_proxy_addrs(&self) -> Self::Output {
+        ProxyAddrsStream(Some(self.to_socket_addrs()))
+    }
+}
+
 impl<'a, T: ToProxyAddrs + ?Sized> ToProxyAddrs for &'a T {
     type Output = T::Output;
 
     fn to_proxy_addrs(&self) -> Self::Output {
         (**self).to_proxy_addrs()
+    }
+}
+
+pub struct ProxyAddrsStream(Option<io::Result<vec::IntoIter<SocketAddr>>>);
+
+impl Stream for ProxyAddrsStream {
+    type Item = SocketAddr;
+    type Error = Error;
+
+    fn poll(&mut self) -> Poll<Option<SocketAddr>, Self::Error> {
+        if let Some(res) = &mut self.0 {
+            if let Ok(iter) = res {
+                return Ok(Async::Ready(iter.next()));
+            }
+            // res is err
+            let _ = self.0.take().unwrap()?;
+        }
+        unreachable!()
     }
 }
 
@@ -148,8 +189,8 @@ impl IntoTargetAddr<'static> for (String, u16) {
 }
 
 impl<'a, T> IntoTargetAddr<'a> for &'a T
-where
-    T: IntoTargetAddr<'a> + Copy,
+    where
+        T: IntoTargetAddr<'a> + Copy,
 {
     fn into_target_addr(self) -> Result<TargetAddr<'a>> {
         (*self).into_target_addr()
@@ -214,8 +255,8 @@ mod tests {
     }
 
     fn into_target_addr<'a, T>(t: T) -> Result<TargetAddr<'a>>
-    where
-        T: IntoTargetAddr<'a>,
+        where
+            T: IntoTargetAddr<'a>,
     {
         t.into_target_addr()
     }

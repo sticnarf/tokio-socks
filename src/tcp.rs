@@ -235,7 +235,7 @@ where
                             0x02 => {
                                 self.state = ConnectState::PasswordAuth(opt.take());
                                 self.prepare_send_password_auth();
-                            },
+                            }
                             m if m != self.auth.id() => Err(Error::UnknownAuthMethod)?,
                             _ => unimplemented!(),
                         }
@@ -351,7 +351,10 @@ where
                                 let domain = String::from_utf8(domain_bytes).map_err(|_| {
                                     Error::InvalidTargetAddress("not a valid UTF-8 string")
                                 })?;
-                                let port = read_port(&self.buf[(self.len - 2)..self.len]);
+                                let port = u16::from_be_bytes([
+                                    self.buf[self.len - 2],
+                                    self.buf[self.len - 1],
+                                ]);
                                 TargetAddr::Domain(domain.into(), port)
                             }
                             _ => unreachable!(),
