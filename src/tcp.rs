@@ -1,7 +1,9 @@
 use crate::{Authentication, Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
+use bytes::{Buf, BufMut};
 use derefable::Derefable;
 use futures::{try_ready, Async, Future, Poll, Stream};
 use std::borrow::Borrow;
+use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_tcp::{ConnectFuture as TokioConnect, TcpStream};
@@ -383,4 +385,75 @@ enum ConnectState {
     RequestSent(Option<TcpStream>),
     PrepareReadAddress(Option<TcpStream>),
     ReadAddress(Option<TcpStream>),
+}
+
+impl Read for Socks5Stream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.tcp.read(buf)
+    }
+}
+
+impl Write for Socks5Stream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.tcp.write(buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.tcp.flush()
+    }
+}
+
+impl AsyncRead for Socks5Stream {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        self.tcp.prepare_uninitialized_buffer(buf)
+    }
+
+    fn read_buf<B: BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+        self.tcp.read_buf(buf)
+    }
+}
+
+impl AsyncWrite for Socks5Stream {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        AsyncWrite::shutdown(&mut self.tcp)
+    }
+
+    fn write_buf<B: Buf>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+        self.tcp.write_buf(buf)
+    }
+}
+
+impl<'a> Read for &'a Socks5Stream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        Read::read(&mut &self.tcp, buf)
+    }
+}
+
+impl<'a> Write for &'a Socks5Stream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        Write::write(&mut &self.tcp, buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Write::flush(&mut &self.tcp)
+    }
+}
+
+impl<'a> AsyncRead for &'a Socks5Stream {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+        AsyncRead::prepare_uninitialized_buffer(&self.tcp, buf)
+    }
+
+    fn read_buf<B: BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+        AsyncRead::read_buf(&mut &self.tcp, buf)
+    }
+}
+
+impl<'a> AsyncWrite for &'a Socks5Stream {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        AsyncWrite::shutdown(&mut &self.tcp)
+    }
+
+    fn write_buf<B: Buf>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
+        AsyncWrite::write_buf(&mut &self.tcp, buf)
+    }
 }

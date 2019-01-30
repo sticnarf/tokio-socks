@@ -9,8 +9,10 @@ futures = "0.1"
 tokio-tcp = "0.1"
 tokio-udp = "0.1"
 tokio-io = "0.1"
+bytes = "0.4"
 failure = "0.1"
 derefable = "0.1"
 
 [dev-dependencies]
 hyper = "0.12"
+tokio = "0.1"
