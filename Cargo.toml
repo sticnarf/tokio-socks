@@ -1,8 +1,20 @@
 [package]
 name = "tokio-socks"
+description = "Asynchronous SOCKS proxy support for Rust."
+documentation = "https://docs.rs/tokio-socks"
+homepage = "https://github.com/sticnarf/tokio-socks"
+repository = "https://github.com/sticnarf/tokio-socks"
+readme = "README.md"
+categories = ["asynchronous", "network-programming"]
+keywords = ["tokio", "async", "proxy", "socks", "socks5"]
+license = "MIT"
+license-file = "LICENSE"
 version = "0.1.0"
 authors = ["Yilin Chen <sticnarf@gmail.com>"]
 edition = "2018"
+
+[badges]
+travis-ci = { repository = "sticnarf/tokio-socks" }
 
 [dependencies]
 futures = "0.1"
