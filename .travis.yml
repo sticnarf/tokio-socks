@@ -13,7 +13,7 @@ cache: cargo
 before_install:
   - sudo add-apt-repository ppa:artyom.h31/3proxy -y
   - sudo apt-get update
-  - sudo apt-get install socat 3proxy -y
+  - sudo apt-get install 3proxy -y
 script:
   - cargo build --verbose --all
   - cargo test --lib --verbose

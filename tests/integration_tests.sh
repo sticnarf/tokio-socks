@@ -3,8 +3,8 @@ set -x
 
 dir="$(dirname "$(which "$0")")"
 
-socat tcp-listen:10007,fork exec:cat &
-echo $! > /tmp/socat-test.pid
+#socat tcp-listen:10007,fork exec:cat &
+#echo $! > /tmp/socat-test.pid
 
 if test -z "$@"; then
     list="no_auth username_auth"
@@ -26,5 +26,5 @@ for test in ${list}; do
 done
 
 
-pkill -F /tmp/socat-test.pid
+#pkill -F /tmp/socat-test.pid
 exit ${test_exit_code}

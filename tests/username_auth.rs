@@ -1,7 +1,9 @@
+mod common;
+
+use common::runtime;
 use tokio::{
     io::{read_exact, write_all},
     prelude::*,
-    runtime::Runtime,
 };
 use tokio_socks::{tcp::Socks5Stream, Error};
 
@@ -21,8 +23,8 @@ fn connect() -> Result<()> {
         .and_then(|(tcp, _)| read_exact(tcp, [0; 5]).map_err(Into::into))
         .map(|(_, v)| v);
 
-    let mut runtime = Runtime::new()?;
-    let res = runtime.block_on(fut)?;
+    let runtime = runtime();
+    let res = runtime.lock().unwrap().block_on(fut)?;
     assert_eq!(&res[..], MSG);
     Ok(())
 }

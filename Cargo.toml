@@ -27,3 +27,4 @@ derefable = "0.1"
 [dev-dependencies]
 hyper = "0.12"
 tokio = "0.1"
+once_cell = "0.1"
