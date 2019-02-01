@@ -1,12 +1,19 @@
 use crate::{Authentication, Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
 use bytes::{Buf, BufMut};
 use derefable::Derefable;
-use futures::{try_ready, Async, Future, Poll, Stream};
+use futures::{stream, try_ready, Async, Future, Poll, Stream};
 use std::borrow::Borrow;
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_tcp::{ConnectFuture as TokioConnect, TcpStream};
+
+#[repr(u8)]
+enum Command {
+    Connect = 0x01,
+    Bind = 0x02,
+    Associate = 0x03,
+}
 
 /// A SOCKS5 client.
 ///
@@ -31,6 +38,7 @@ impl Socks5Stream {
     {
         Ok(ConnectFuture::new(
             Authentication::None,
+            Command::Connect,
             proxy.to_proxy_addrs(),
             target.into_target_addr()?,
         ))
@@ -51,20 +59,41 @@ impl Socks5Stream {
         P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
     {
-        let username_len = username.as_bytes().len();
-        if username_len < 1 || username_len > 255 {
-            Err(Error::InvalidAuthValues(
-                "username length should between 1 to 255",
-            ))?
-        }
-        let password_len = password.as_bytes().len();
-        if password_len < 1 || password_len > 255 {
-            Err(Error::InvalidAuthValues(
-                "password length should between 1 to 255",
-            ))?
-        }
         Ok(ConnectFuture::new(
             Authentication::Password { username, password },
+            Command::Connect,
+            proxy.to_proxy_addrs(),
+            target.into_target_addr()?,
+        ))
+    }
+
+    fn connect_raw<'a, 't, P, T>(
+        proxy: P,
+        target: T,
+        auth: Authentication<'a>,
+        command: Command,
+    ) -> Result<ConnectFuture<'a, 't, P::Output>>
+    where
+        P: ToProxyAddrs,
+        T: IntoTargetAddr<'t>,
+    {
+        if let Authentication::Password { username, password } = auth {
+            let username_len = username.as_bytes().len();
+            if username_len < 1 || username_len > 255 {
+                Err(Error::InvalidAuthValues(
+                    "username length should between 1 to 255",
+                ))?
+            }
+            let password_len = password.as_bytes().len();
+            if password_len < 1 || password_len > 255 {
+                Err(Error::InvalidAuthValues(
+                    "password length should between 1 to 255",
+                ))?
+            }
+        }
+        Ok(ConnectFuture::new(
+            auth,
+            command,
             proxy.to_proxy_addrs(),
             target.into_target_addr()?,
         ))
@@ -87,11 +116,13 @@ impl Socks5Stream {
     }
 }
 
+/// A `Future` which resolves to a socket to the target server through proxy.
 pub struct ConnectFuture<'a, 't, S>
 where
     S: Stream<Item = SocketAddr, Error = Error>,
 {
     auth: Authentication<'a>,
+    command: Command,
     proxy: S,
     target: TargetAddr<'t>,
     state: ConnectState,
@@ -104,9 +135,10 @@ impl<'a, 't, S> ConnectFuture<'a, 't, S>
 where
     S: Stream<Item = SocketAddr, Error = Error>,
 {
-    fn new(auth: Authentication<'a>, proxy: S, target: TargetAddr<'t>) -> Self {
+    fn new(auth: Authentication<'a>, command: Command, proxy: S, target: TargetAddr<'t>) -> Self {
         ConnectFuture {
             auth,
+            command,
             proxy,
             target,
             state: ConnectState::Uninitialized,
@@ -385,6 +417,114 @@ enum ConnectState {
     RequestSent(Option<TcpStream>),
     PrepareReadAddress(Option<TcpStream>),
     ReadAddress(Option<TcpStream>),
+}
+
+/// A SOCKS5 BIND client.
+///
+/// Once you get an instance of `Socks5Listener`, you should send the `bind_addr`
+/// to the remote process via the primary connection. Then, call the `accept` function
+/// and wait for the other end connecting to the rendezvous address.
+pub struct Socks5Listener {
+    inner: Socks5Stream,
+}
+
+impl Socks5Listener {
+    /// Initiates a BIND request to the specified proxy.
+    ///
+    /// The proxy will filter incoming connections based on the value of
+    /// `target`.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to `TargetAddr`.
+    pub fn bind<'t, P, T>(proxy: P, target: T) -> Result<BindFuture<'static, 't, P::Output>>
+    where
+        P: ToProxyAddrs,
+        T: IntoTargetAddr<'t>,
+    {
+        Ok(BindFuture(ConnectFuture::new(
+            Authentication::None,
+            Command::Bind,
+            proxy.to_proxy_addrs(),
+            target.into_target_addr()?,
+        )))
+    }
+
+    /// Initiates a BIND request to the specified proxy using given username
+    /// and password.
+    ///
+    /// The proxy will filter incoming connections based on the value of
+    /// `target`.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to `TargetAddr`.
+    pub fn bind_with_password<'a, 't, P, T>(
+        proxy: P,
+        target: T,
+        username: &'a str,
+        password: &'a str,
+    ) -> Result<BindFuture<'a, 't, P::Output>>
+    where
+        P: ToProxyAddrs,
+        T: IntoTargetAddr<'t>,
+    {
+        Ok(BindFuture(ConnectFuture::new(
+            Authentication::Password { username, password },
+            Command::Bind,
+            proxy.to_proxy_addrs(),
+            target.into_target_addr()?,
+        )))
+    }
+
+    /// Returns the address of the proxy-side TCP listener.
+    ///
+    /// This should be forwarded to the remote process, which should open a
+    /// connection to it.
+    pub fn bind_addr(&self) -> TargetAddr {
+        self.inner.target_addr()
+    }
+
+    /// Consumes this listener, returning a `Future` which resolves to the `Socks5Stream`
+    /// connected to the target server through the proxy.
+    ///
+    /// The value of `bind_addr` should be forwarded to the remote process
+    /// before this method is called.
+    pub fn accept(self) -> impl Future<Item = Socks5Stream, Error = Error> {
+        let mut conn_fut = ConnectFuture {
+            auth: Authentication::None,
+            command: Command::Bind,
+            proxy: stream::empty(),
+            target: self.inner.target,
+            state: ConnectState::RequestSent(Some(self.inner.tcp)),
+            buf: [0; 262],
+            ptr: 0,
+            len: 0,
+        };
+        conn_fut.prepare_recv_reply();
+        conn_fut
+    }
+}
+
+/// A `Future` which resolves to a `Socks5Listener`.
+///
+/// After this future is resolved, the SOCKS5 client has finished the negotiation
+/// with the proxy server.
+pub struct BindFuture<'a, 't, S>(ConnectFuture<'a, 't, S>)
+where
+    S: Stream<Item = SocketAddr, Error = Error>;
+
+impl<'a, 't, S> Future for BindFuture<'a, 't, S>
+where
+    S: Stream<Item = SocketAddr, Error = Error>,
+{
+    type Item = Socks5Listener;
+    type Error = Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let tcp = try_ready!(self.0.poll());
+        Ok(Async::Ready(Socks5Listener { inner: tcp }))
+    }
 }
 
 impl Read for Socks5Stream {
