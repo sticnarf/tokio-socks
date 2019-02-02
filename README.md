@@ -9,7 +9,7 @@ Asynchronous SOCKS proxy support for Rust.
 ## Features
 
 - [x] `CONNECT` command
-- [ ] `BIND` command
+- [x] `BIND` command
 - [ ] `ASSOCIATE` command
 - [x] Username/password authentication
 - [ ] GSSAPI authentication
