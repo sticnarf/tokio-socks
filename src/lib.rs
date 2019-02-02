@@ -1,3 +1,4 @@
+use either::Either;
 use futures::{
     stream::{self, IterOk, Once, Stream},
     Async, Poll,
@@ -114,6 +115,19 @@ impl<'a> TargetAddr<'a> {
                 TargetAddr::Domain(String::from(domain.clone()).into(), *port)
             }
         }
+    }
+}
+
+impl<'a> ToSocketAddrs for TargetAddr<'a> {
+    type Iter = Either<std::option::IntoIter<SocketAddr>, std::vec::IntoIter<SocketAddr>>;
+
+    fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
+        Ok(match self {
+            TargetAddr::Ip(addr) => Either::Left(addr.to_socket_addrs()?),
+            TargetAddr::Domain(domain, port) => {
+                Either::Right((&**domain, *port).to_socket_addrs()?)
+            }
+        })
     }
 }
 

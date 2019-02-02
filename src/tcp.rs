@@ -9,6 +9,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_tcp::{ConnectFuture as TokioConnect, TcpStream};
 
 #[repr(u8)]
+#[derive(Clone, Copy)]
 enum Command {
     Connect = 0x01,
     Bind = 0x02,
@@ -36,12 +37,7 @@ impl Socks5Stream {
         P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
     {
-        Ok(ConnectFuture::new(
-            Authentication::None,
-            Command::Connect,
-            proxy.to_proxy_addrs(),
-            target.into_target_addr()?,
-        ))
+        Self::connect_raw(proxy, target, Authentication::None, Command::Connect)
     }
 
     /// Connects to a target server through a SOCKS5 proxy using given username and password.
@@ -59,12 +55,12 @@ impl Socks5Stream {
         P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
     {
-        Ok(ConnectFuture::new(
+        Self::connect_raw(
+            proxy,
+            target,
             Authentication::Password { username, password },
             Command::Connect,
-            proxy.to_proxy_addrs(),
-            target.into_target_addr()?,
-        ))
+        )
     }
 
     fn connect_raw<'a, 't, P, T>(
@@ -193,7 +189,7 @@ where
 
     fn prepare_send_request(&mut self) {
         self.ptr = 0;
-        self.buf[..3].copy_from_slice(&[0x05, 0x01, 0x00]);
+        self.buf[..3].copy_from_slice(&[0x05, self.command as u8, 0x00]);
         match &self.target {
             TargetAddr::Ip(SocketAddr::V4(addr)) => {
                 self.buf[3] = 0x01;

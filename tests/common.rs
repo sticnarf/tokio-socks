@@ -1,22 +1,74 @@
 use once_cell::sync::OnceCell;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, TcpStream as StdTcpStream};
 use std::sync::Mutex;
-use tokio::{io, net::TcpListener, prelude::*, runtime::Runtime};
-use tokio_socks::Error;
+use tokio::{
+    io::{copy, read_exact, write_all},
+    net::TcpListener,
+    prelude::*,
+    runtime::Runtime,
+};
+use tokio_socks::{
+    tcp::{BindFuture, ConnectFuture},
+    Error,
+};
 
 type Result<T> = std::result::Result<T, Error>;
 
+pub const PROXY_ADDR: &'static str = "127.0.0.1:41080";
+pub const ECHO_SERVER_ADDR: &'static str = "localhost:10007";
+pub const MSG: &[u8] = b"hello";
+
 pub fn echo_server(runtime: &mut Runtime) -> Result<()> {
-    let listener = TcpListener::bind(&SocketAddr::from(([127, 0, 0, 1], 10007)))?;
+    let listener = TcpListener::bind(&SocketAddr::from(([0, 0, 0, 0], 10007)))?;
     let fut = listener
         .incoming()
         .for_each(|tcp| {
-            let (read, write) = tcp.split();
-            tokio::spawn(io::copy(read, write).map(|_| ()).map_err(|_| ()));
+            let (reader, writer) = tcp.split();
+            tokio::spawn(copy(reader, writer).map(|_| ()).map_err(|_| ()));
             Ok(())
         })
         .map_err(|_| ());
     runtime.spawn(fut);
+    Ok(())
+}
+
+pub fn test_connect<S>(conn: ConnectFuture<'static, 'static, S>) -> Result<()>
+where
+    S: Stream<Item = SocketAddr, Error = Error> + Send + 'static,
+{
+    let fut = conn
+        .and_then(|tcp| write_all(tcp, MSG).map_err(Into::into))
+        .and_then(|(tcp, _)| read_exact(tcp, [0; 5]).map_err(Into::into))
+        .map(|(_, v)| v);
+    let runtime = runtime();
+    let res = runtime.lock().unwrap().block_on(fut)?;
+    assert_eq!(&res[..], MSG);
+    Ok(())
+}
+
+pub fn test_bind<S>(bind: BindFuture<'static, 'static, S>) -> Result<()>
+where
+    S: Stream<Item = SocketAddr, Error = Error> + Send + 'static,
+{
+    let fut = bind.and_then(|bind| {
+        let bind_addr = bind.bind_addr().to_owned();
+        tokio::spawn(
+            bind.accept()
+                .and_then(|tcp| {
+                    let (reader, writer) = tcp.split();
+                    copy(reader, writer).map(|_| ()).map_err(Into::into)
+                })
+                .map_err(|_| ()),
+        );
+        Ok(bind_addr)
+    });
+    let runtime = runtime();
+    let bind_addr = runtime.lock().unwrap().block_on(fut)?;
+    let mut tcp = StdTcpStream::connect(bind_addr)?;
+    tcp.write_all(MSG)?;
+    let mut buf = [0; 5];
+    tcp.read_exact(&mut buf[..])?;
+    assert_eq!(&buf[..], MSG);
     Ok(())
 }
 
