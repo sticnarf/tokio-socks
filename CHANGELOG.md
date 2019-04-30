@@ -1,3 +1,7 @@
+# 0.1.2
+
+* Fix ConnectFuture buffer too small (#1)
+
 # 0.1.1
 
 * Support SOCKS5 `BIND` command.
