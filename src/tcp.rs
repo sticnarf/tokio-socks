@@ -493,7 +493,7 @@ impl Socks5Listener {
             proxy: stream::empty(),
             target: self.inner.target,
             state: ConnectState::RequestSent(Some(self.inner.tcp)),
-            buf: [0; 262],
+            buf: [0; 513],
             ptr: 0,
             len: 0,
         };
