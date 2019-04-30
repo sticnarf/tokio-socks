@@ -138,7 +138,7 @@ where
             proxy,
             target,
             state: ConnectState::Uninitialized,
-            buf: [0; 262],
+            buf: [0; 513],
             ptr: 0,
             len: 0,
         }
