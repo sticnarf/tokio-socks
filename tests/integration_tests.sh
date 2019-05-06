@@ -7,7 +7,7 @@ dir="$(dirname "$(which "$0")")"
 #echo $! > /tmp/socat-test.pid
 
 if test -z "$@"; then
-    list="no_auth username_auth long_username_password_auth"
+    list="no_auth username_auth long_username_password_auth existing_tcp_conn"
 else
     list="$@"
 fi

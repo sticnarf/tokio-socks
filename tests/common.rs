@@ -8,7 +8,7 @@ use tokio::{
     runtime::Runtime,
 };
 use tokio_socks::{
-    tcp::{BindFuture, ConnectFuture},
+    tcp::{BindFuture, Socks5Stream},
     Error,
 };
 
@@ -32,9 +32,9 @@ pub fn echo_server(runtime: &mut Runtime) -> Result<()> {
     Ok(())
 }
 
-pub fn test_connect<S>(conn: ConnectFuture<'static, 'static, S>) -> Result<()>
+pub fn test_connect<F>(conn: F) -> Result<()>
 where
-    S: Stream<Item = SocketAddr, Error = Error> + Send + 'static,
+    F: Future<Item = Socks5Stream, Error = Error> + Send + 'static,
 {
     let fut = conn
         .and_then(|tcp| write_all(tcp, MSG).map_err(Into::into))
@@ -46,6 +46,7 @@ where
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn test_bind<S>(bind: BindFuture<'static, 'static, S>) -> Result<()>
 where
     S: Stream<Item = SocketAddr, Error = Error> + Send + 'static,
