@@ -66,7 +66,7 @@ impl Socks5Stream {
 
     /// Connects to a target server through a SOCKS5 proxy on an existing TCP connection
     /// to the proxy
-    pub fn handshake<'a, 't, T>(
+    pub fn connect_existing<'a, 't, T>(
         proxy_conn: TcpStream,
         target: T,
     ) -> Result<ConnectFuture<'static, 't, stream::Once<SocketAddr, Error>>>
@@ -84,7 +84,7 @@ impl Socks5Stream {
 
     /// Connects to a target server through a SOCKS5 proxy on an existing TCP connection
     /// to the proxy using given username and password
-    pub fn handshake_with_password<'a, 't, T>(
+    pub fn connect_existing_with_password<'a, 't, T>(
         proxy_conn: TcpStream,
         target: T,
         username: &'a str,
