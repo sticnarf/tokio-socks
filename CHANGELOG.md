@@ -1,3 +1,7 @@
+# 0.1.3
+
+* Implement `IntoTargetAddr<'static>` for `String` (#8)
+
 # 0.1.2
 
 * Fix ConnectFuture buffer too small (#1)
