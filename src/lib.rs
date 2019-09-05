@@ -154,6 +154,12 @@ trivial_impl_into_target_addr!((Ipv6Addr, u16));
 trivial_impl_into_target_addr!(SocketAddrV4);
 trivial_impl_into_target_addr!(SocketAddrV6);
 
+impl<'a> IntoTargetAddr<'a> for TargetAddr<'a> {
+    fn into_target_addr(self) -> Result<TargetAddr<'a>> {
+        Ok(self)
+    }
+}
+
 impl<'a> IntoTargetAddr<'a> for (&'a str, u16) {
     fn into_target_addr(self) -> Result<TargetAddr<'a>> {
         // Try IP address first
@@ -187,7 +193,28 @@ impl<'a> IntoTargetAddr<'a> for &'a str {
         let domain = parts_iter
             .next()
             .ok_or(Error::InvalidTargetAddress("invalid address format"))?;
-        (domain, port).into_target_addr()
+        Ok(TargetAddr::Domain(domain.into(), port))
+    }
+}
+
+impl IntoTargetAddr<'static> for String {
+    fn into_target_addr(mut self) -> Result<TargetAddr<'static>> {
+        // Try IP address first
+        if let Ok(addr) = self.parse::<SocketAddr>() {
+            return addr.into_target_addr();
+        }
+
+        let mut parts_iter = self.rsplitn(2, ':');
+        let port: u16 = parts_iter
+            .next()
+            .and_then(|port_str| port_str.parse().ok())
+            .ok_or(Error::InvalidTargetAddress("invalid address format"))?;
+        let domain_len = parts_iter
+            .next()
+            .ok_or(Error::InvalidTargetAddress("invalid address format"))?
+            .len();
+        self.truncate(domain_len);
+        Ok(TargetAddr::Domain(self.into(), port))
     }
 }
 
@@ -315,6 +342,12 @@ mod tests {
         let res = into_target_addr(domain)?;
         assert_eq!(
             TargetAddr::Domain(Cow::Borrowed("www.example.com"), 80),
+            res
+        );
+
+        let res = into_target_addr(domain.to_owned())?;
+        assert_eq!(
+            TargetAddr::Domain(Cow::Owned("www.example.com".to_owned()), 80),
             res
         );
         Ok(())
