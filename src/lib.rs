@@ -168,8 +168,7 @@ impl<'a> IntoTargetAddr<'a> for (&'a str, u16) {
         }
 
         // Treat as domain name
-        let len = self.0.as_bytes().len();
-        if len > 255 {
+        if self.0.len() > 255 {
             return Err(Error::InvalidTargetAddress("overlong domain"));
         }
         // TODO: Should we validate the domain format here?
@@ -193,6 +192,9 @@ impl<'a> IntoTargetAddr<'a> for &'a str {
         let domain = parts_iter
             .next()
             .ok_or(Error::InvalidTargetAddress("invalid address format"))?;
+        if domain.len() > 255 {
+            return Err(Error::InvalidTargetAddress("overlong domain"));
+        }
         Ok(TargetAddr::Domain(domain.into(), port))
     }
 }
@@ -213,6 +215,9 @@ impl IntoTargetAddr<'static> for String {
             .next()
             .ok_or(Error::InvalidTargetAddress("invalid address format"))?
             .len();
+        if domain_len > 255 {
+            return Err(Error::InvalidTargetAddress("overlong domain"));
+        }
         self.truncate(domain_len);
         Ok(TargetAddr::Domain(self.into(), port))
     }
