@@ -19,6 +19,7 @@ for test in ${list}; do
     test_exit_code=$?
 
     pkill -F /tmp/3proxy-test.pid
+    sleep 1
 
     if test "$test_exit_code" -ne 0; then
         break

@@ -37,7 +37,7 @@ impl Socks5Stream {
         P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
     {
-        Self::connect_raw(proxy, target, Authentication::None, Command::Connect)
+        Self::connect_raw(proxy, None, target, Authentication::None, Command::Connect)
     }
 
     /// Connects to a target server through a SOCKS5 proxy using given username and password.
@@ -57,6 +57,45 @@ impl Socks5Stream {
     {
         Self::connect_raw(
             proxy,
+            None,
+            target,
+            Authentication::Password { username, password },
+            Command::Connect,
+        )
+    }
+
+    /// Connects to a target server through a SOCKS5 proxy on an existing TCP connection
+    /// to the proxy
+    pub fn connect_existing<'a, 't, T>(
+        proxy_conn: TcpStream,
+        target: T,
+    ) -> Result<ConnectFuture<'static, 't, stream::Once<SocketAddr, Error>>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        Self::connect_raw(
+            proxy_conn.peer_addr()?,
+            Some(proxy_conn),
+            target,
+            Authentication::None,
+            Command::Connect,
+        )
+    }
+
+    /// Connects to a target server through a SOCKS5 proxy on an existing TCP connection
+    /// to the proxy using given username and password
+    pub fn connect_existing_with_password<'a, 't, T>(
+        proxy_conn: TcpStream,
+        target: T,
+        username: &'a str,
+        password: &'a str,
+    ) -> Result<ConnectFuture<'a, 't, stream::Once<SocketAddr, Error>>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        Self::connect_raw(
+            proxy_conn.peer_addr()?,
+            Some(proxy_conn),
             target,
             Authentication::Password { username, password },
             Command::Connect,
@@ -65,6 +104,7 @@ impl Socks5Stream {
 
     fn connect_raw<'a, 't, P, T>(
         proxy: P,
+        proxy_conn: Option<TcpStream>,
         target: T,
         auth: Authentication<'a>,
         command: Command,
@@ -91,6 +131,7 @@ impl Socks5Stream {
             auth,
             command,
             proxy.to_proxy_addrs(),
+            proxy_conn,
             target.into_target_addr()?,
         ))
     }
@@ -131,13 +172,24 @@ impl<'a, 't, S> ConnectFuture<'a, 't, S>
 where
     S: Stream<Item = SocketAddr, Error = Error>,
 {
-    fn new(auth: Authentication<'a>, command: Command, proxy: S, target: TargetAddr<'t>) -> Self {
+    fn new(
+        auth: Authentication<'a>,
+        command: Command,
+        proxy: S,
+        proxy_conn: Option<TcpStream>,
+        target: TargetAddr<'t>,
+    ) -> Self {
+        let state = if let Some(c) = proxy_conn {
+            ConnectState::Connected(Some(c))
+        } else {
+            ConnectState::Uninitialized
+        };
         ConnectFuture {
             auth,
             command,
             proxy,
             target,
-            state: ConnectState::Uninitialized,
+            state,
             buf: [0; 513],
             ptr: 0,
             len: 0,
@@ -238,17 +290,17 @@ where
                 ConnectState::Created(ref mut conn_fut) => match conn_fut.poll() {
                     Ok(Async::Ready(tcp)) => {
                         self.state = ConnectState::Connected(Some(tcp));
-                        self.prepare_send_method_selection()
                     }
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
                     Err(_e) => self.state = ConnectState::Uninitialized,
                 },
                 ConnectState::Connected(ref mut opt) => {
-                    let tcp = opt.as_mut().unwrap();
+                    let mut conn = opt.take();
+                    let tcp = conn.as_mut().unwrap();
+                    self.prepare_send_method_selection();
                     self.ptr += try_ready!(tcp.poll_write(&self.buf[self.ptr..self.len]));
-                    ;
                     if self.ptr == self.len {
-                        self.state = ConnectState::MethodSent(opt.take());
+                        self.state = ConnectState::MethodSent(conn);
                         self.prepare_recv_method_selection();
                     }
                 }
@@ -260,11 +312,10 @@ where
                             Err(Error::InvalidResponseVersion)?
                         }
                         match self.buf[1] {
-                            0x00 => self.state = ConnectState::PrepareRequest(opt.take()),
+                            0x00 => self.state = ConnectState::SendRequest(opt.take()),
                             0xff => Err(Error::NoAcceptableAuthMethods)?,
                             0x02 => {
                                 self.state = ConnectState::PasswordAuth(opt.take());
-                                self.prepare_send_password_auth();
                             }
                             m if m != self.auth.id() => Err(Error::UnknownAuthMethod)?,
                             _ => unimplemented!(),
@@ -272,10 +323,12 @@ where
                     }
                 }
                 ConnectState::PasswordAuth(ref mut opt) => {
-                    let tcp = opt.as_mut().unwrap();
+                    let mut conn = opt.take();
+                    let tcp = conn.as_mut().unwrap();
+                    self.prepare_send_password_auth();
                     self.ptr += try_ready!(tcp.poll_write(&self.buf[self.ptr..self.len]));
                     if self.ptr == self.len {
-                        self.state = ConnectState::PasswordAuthSent(opt.take());
+                        self.state = ConnectState::PasswordAuthSent(conn);
                         self.prepare_recv_password_auth();
                     }
                 }
@@ -289,18 +342,16 @@ where
                         if self.buf[1] != 0x00 {
                             Err(Error::PasswordAuthFailure(self.buf[1]))?
                         }
-                        self.state = ConnectState::PrepareRequest(opt.take());
+                        self.state = ConnectState::SendRequest(opt.take());
                     }
                 }
-                ConnectState::PrepareRequest(ref mut opt) => {
-                    self.state = ConnectState::SendRequest(opt.take());
-                    self.prepare_send_request();
-                }
                 ConnectState::SendRequest(ref mut opt) => {
-                    let tcp = opt.as_mut().unwrap();
+                    let mut conn = opt.take();
+                    let tcp = conn.as_mut().unwrap();
+                    self.prepare_send_request();
                     self.ptr += try_ready!(tcp.poll_write(&self.buf[self.ptr..self.len]));
                     if self.ptr == self.len {
-                        self.state = ConnectState::RequestSent(opt.take());
+                        self.state = ConnectState::RequestSent(conn);
                         self.prepare_recv_reply();
                     }
                 }
@@ -408,7 +459,6 @@ enum ConnectState {
     MethodSent(Option<TcpStream>),
     PasswordAuth(Option<TcpStream>),
     PasswordAuthSent(Option<TcpStream>),
-    PrepareRequest(Option<TcpStream>),
     SendRequest(Option<TcpStream>),
     RequestSent(Option<TcpStream>),
     PrepareReadAddress(Option<TcpStream>),
@@ -442,6 +492,7 @@ impl Socks5Listener {
             Authentication::None,
             Command::Bind,
             proxy.to_proxy_addrs(),
+            None,
             target.into_target_addr()?,
         )))
     }
@@ -469,6 +520,7 @@ impl Socks5Listener {
             Authentication::Password { username, password },
             Command::Bind,
             proxy.to_proxy_addrs(),
+            None,
             target.into_target_addr()?,
         )))
     }
