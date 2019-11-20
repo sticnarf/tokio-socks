@@ -1,26 +1,28 @@
+//#![feature(type_alias_impl_trait)]
+
 use either::Either;
+use futures::task::Context;
 use futures::{
-    stream::{self, IterOk, Once, Stream},
-    Async, Poll,
+    future,
+    stream::{self, Once, Stream},
+    Poll,
 };
+use std::pin::Pin;
 use std::{
     borrow::Cow,
     io,
-    iter::Cloned,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
-    slice::Iter,
     vec,
 };
 
 pub use error::Error;
-use error::Result;
 
 /// A trait for objects which can be converted or resolved to one or more `SocketAddr` values,
 /// which are going to be connected as the the proxy server.
 ///
 /// This trait is similar to `std::net::ToSocketAddrs` but allows asynchronous name resolution.
 pub trait ToProxyAddrs {
-    type Output: Stream<Item = SocketAddr, Error = Error>;
+    type Output: Stream<Item = Result<SocketAddr, Error>> + Unpin;
 
     fn to_proxy_addrs(&self) -> Self::Output;
 }
@@ -28,10 +30,10 @@ pub trait ToProxyAddrs {
 macro_rules! trivial_impl_to_proxy_addrs {
     ($t: ty) => {
         impl ToProxyAddrs for $t {
-            type Output = Once<SocketAddr, Error>;
+            type Output = Once<future::Ready<Result<SocketAddr, Error>>>;
 
             fn to_proxy_addrs(&self) -> Self::Output {
-                stream::once(Ok(SocketAddr::from(*self)))
+                stream::once(future::ready(Ok(SocketAddr::from(*self))))
             }
         }
     };
@@ -45,10 +47,10 @@ trivial_impl_to_proxy_addrs!(SocketAddrV4);
 trivial_impl_to_proxy_addrs!(SocketAddrV6);
 
 impl<'a> ToProxyAddrs for &'a [SocketAddr] {
-    type Output = IterOk<Cloned<Iter<'a, SocketAddr>>, Error>;
+    type Output = ProxyAddrsStream;
 
     fn to_proxy_addrs(&self) -> Self::Output {
-        stream::iter_ok(self.iter().cloned())
+        ProxyAddrsStream(Some(io::Result::Ok(self.to_vec().into_iter())))
     }
 }
 
@@ -79,18 +81,17 @@ impl<'a, T: ToProxyAddrs + ?Sized> ToProxyAddrs for &'a T {
 pub struct ProxyAddrsStream(Option<io::Result<vec::IntoIter<SocketAddr>>>);
 
 impl Stream for ProxyAddrsStream {
-    type Item = SocketAddr;
-    type Error = Error;
+    type Item = Result<SocketAddr, Error>;
 
-    fn poll(&mut self) -> Poll<Option<SocketAddr>, Self::Error> {
-        if let Some(res) = &mut self.0 {
-            if let Ok(iter) = res {
-                return Ok(Async::Ready(iter.next()));
+    fn poll_next(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match self.0.as_mut() {
+            Some(Ok(iter)) => Poll::Ready(iter.next().map(Result::Ok)),
+            Some(Err(_)) => {
+                let err = self.0.take().unwrap().unwrap_err();
+                Poll::Ready(Some(Err(err.into())))
             }
-            // res is err
-            let _ = self.0.take().unwrap()?;
+            None => unreachable!(),
         }
-        unreachable!()
     }
 }
 
@@ -134,13 +135,13 @@ impl<'a> ToSocketAddrs for TargetAddr<'a> {
 /// A trait for objects that can be converted to `TargetAddr`.
 pub trait IntoTargetAddr<'a> {
     /// Converts the value of self to a `TargetAddr`.
-    fn into_target_addr(self) -> Result<TargetAddr<'a>>;
+    fn into_target_addr(self) -> Result<TargetAddr<'a>, Error>;
 }
 
 macro_rules! trivial_impl_into_target_addr {
     ($t: ty) => {
         impl<'a> IntoTargetAddr<'a> for $t {
-            fn into_target_addr(self) -> Result<TargetAddr<'a>> {
+            fn into_target_addr(self) -> Result<TargetAddr<'a>, Error> {
                 Ok(TargetAddr::Ip(SocketAddr::from(self)))
             }
         }
@@ -155,13 +156,13 @@ trivial_impl_into_target_addr!(SocketAddrV4);
 trivial_impl_into_target_addr!(SocketAddrV6);
 
 impl<'a> IntoTargetAddr<'a> for TargetAddr<'a> {
-    fn into_target_addr(self) -> Result<TargetAddr<'a>> {
+    fn into_target_addr(self) -> Result<TargetAddr<'a>, Error> {
         Ok(self)
     }
 }
 
 impl<'a> IntoTargetAddr<'a> for (&'a str, u16) {
-    fn into_target_addr(self) -> Result<TargetAddr<'a>> {
+    fn into_target_addr(self) -> Result<TargetAddr<'a>, Error> {
         // Try IP address first
         if let Ok(addr) = self.0.parse::<IpAddr>() {
             return (addr, self.1).into_target_addr();
@@ -178,7 +179,7 @@ impl<'a> IntoTargetAddr<'a> for (&'a str, u16) {
 }
 
 impl<'a> IntoTargetAddr<'a> for &'a str {
-    fn into_target_addr(self) -> Result<TargetAddr<'a>> {
+    fn into_target_addr(self) -> Result<TargetAddr<'a>, Error> {
         // Try IP address first
         if let Ok(addr) = self.parse::<SocketAddr>() {
             return addr.into_target_addr();
@@ -200,7 +201,7 @@ impl<'a> IntoTargetAddr<'a> for &'a str {
 }
 
 impl IntoTargetAddr<'static> for String {
-    fn into_target_addr(mut self) -> Result<TargetAddr<'static>> {
+    fn into_target_addr(mut self) -> Result<TargetAddr<'static>, Error> {
         // Try IP address first
         if let Ok(addr) = self.parse::<SocketAddr>() {
             return addr.into_target_addr();
@@ -224,7 +225,7 @@ impl IntoTargetAddr<'static> for String {
 }
 
 impl IntoTargetAddr<'static> for (String, u16) {
-    fn into_target_addr(self) -> Result<TargetAddr<'static>> {
+    fn into_target_addr(self) -> Result<TargetAddr<'static>, Error> {
         let addr = (self.0.as_str(), self.1).into_target_addr()?;
         if let TargetAddr::Ip(addr) = addr {
             Ok(TargetAddr::Ip(addr))
@@ -238,7 +239,7 @@ impl<'a, T> IntoTargetAddr<'a> for &'a T
 where
     T: IntoTargetAddr<'a> + Copy,
 {
-    fn into_target_addr(self) -> Result<TargetAddr<'a>> {
+    fn into_target_addr(self) -> Result<TargetAddr<'a>, Error> {
         (*self).into_target_addr()
     }
 }
@@ -268,13 +269,15 @@ pub mod tcp;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::executor::block_on;
+    use futures::StreamExt;
 
-    fn to_proxy_addrs<T: ToProxyAddrs>(t: T) -> Result<Vec<SocketAddr>> {
-        t.to_proxy_addrs().wait().collect()
+    fn to_proxy_addrs<T: ToProxyAddrs>(t: T) -> Result<Vec<SocketAddr>, Error> {
+        Ok(block_on(t.to_proxy_addrs().map(Result::unwrap).collect()))
     }
 
     #[test]
-    fn converts_socket_addr_to_proxy_addrs() -> Result<()> {
+    fn converts_socket_addr_to_proxy_addrs() -> Result<(), Error> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
         let res = to_proxy_addrs(addr)?;
         assert_eq!(&res[..], &[addr]);
@@ -282,7 +285,7 @@ mod tests {
     }
 
     #[test]
-    fn converts_socket_addr_ref_to_proxy_addrs() -> Result<()> {
+    fn converts_socket_addr_ref_to_proxy_addrs() -> Result<(), Error> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
         let res = to_proxy_addrs(&addr)?;
         assert_eq!(&res[..], &[addr]);
@@ -290,7 +293,7 @@ mod tests {
     }
 
     #[test]
-    fn converts_socket_addrs_to_proxy_addrs() -> Result<()> {
+    fn converts_socket_addrs_to_proxy_addrs() -> Result<(), Error> {
         let addrs = [
             SocketAddr::from(([1, 1, 1, 1], 443)),
             SocketAddr::from(([8, 8, 8, 8], 53)),
@@ -300,7 +303,7 @@ mod tests {
         Ok(())
     }
 
-    fn into_target_addr<'a, T>(t: T) -> Result<TargetAddr<'a>>
+    fn into_target_addr<'a, T>(t: T) -> Result<TargetAddr<'a>, Error>
     where
         T: IntoTargetAddr<'a>,
     {
@@ -308,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn converts_socket_addr_to_target_addr() -> Result<()> {
+    fn converts_socket_addr_to_target_addr() -> Result<(), Error> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
         let res = into_target_addr(addr)?;
         assert_eq!(TargetAddr::Ip(addr), res);
@@ -316,7 +319,7 @@ mod tests {
     }
 
     #[test]
-    fn converts_socket_addr_ref_to_target_addr() -> Result<()> {
+    fn converts_socket_addr_ref_to_target_addr() -> Result<(), Error> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
         let res = into_target_addr(&addr)?;
         assert_eq!(TargetAddr::Ip(addr), res);
@@ -324,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn converts_socket_addr_str_to_target_addr() -> Result<()> {
+    fn converts_socket_addr_str_to_target_addr() -> Result<(), Error> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
         let ip_str = format!("{}", addr);
         let res = into_target_addr(ip_str.as_str())?;
@@ -333,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn converts_ip_str_and_port_target_addr() -> Result<()> {
+    fn converts_ip_str_and_port_target_addr() -> Result<(), Error> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
         let ip_str = format!("{}", addr.ip());
         let res = into_target_addr((ip_str.as_str(), addr.port()))?;
@@ -342,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    fn converts_domain_to_target_addr() -> Result<()> {
+    fn converts_domain_to_target_addr() -> Result<(), Error> {
         let domain = "www.example.com:80";
         let res = into_target_addr(domain)?;
         assert_eq!(
@@ -359,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn converts_domain_and_port_to_target_addr() -> Result<()> {
+    fn converts_domain_and_port_to_target_addr() -> Result<(), Error> {
         let domain = "www.example.com";
         let res = into_target_addr((domain, 80))?;
         assert_eq!(

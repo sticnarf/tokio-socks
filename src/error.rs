@@ -71,5 +71,5 @@ impl From<std::io::Error> for Error {
     }
 }
 
-/// Result type of `tokio-socks`
-pub type Result<T> = std::result::Result<T, Error>;
+///// Result type of `tokio-socks`
+//pub type Result<T> = std::result::Result<T, Error>;
