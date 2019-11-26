@@ -2,15 +2,16 @@
 //!
 //! This example requires a running tor proxy.
 
-use tokio_socks::tcp::{Socks5Stream};
-use tokio_socks::Error;
-use tokio::runtime::Runtime;
-use tokio::io::{AsyncWriteExt, AsyncReadExt};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    runtime::Runtime,
+};
+use tokio_socks::{tcp::Socks5Stream, Error};
 
 const PROXY_ADDR: &str = "127.0.0.1:9050";
-const ONION_ADDR: &str = "3g2upl4pq6kufc4m.onion:80"; /* DuckDuckGo */
+const ONION_ADDR: &str = "3g2upl4pq6kufc4m.onion:80"; // DuckDuckGo
 
-async fn connect() -> Result<(), Error>{
+async fn connect() -> Result<(), Error> {
     let target = Socks5Stream::tor_resolve(PROXY_ADDR, "duckduckgo.com:0").await?;
     eprintln!("duckduckgo.com = {:?}", target);
     let target = Socks5Stream::tor_resolve_ptr(PROXY_ADDR, "176.34.155.23:0").await?;

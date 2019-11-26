@@ -1,10 +1,10 @@
 mod common;
 
 use common::{runtime, test_bind, test_connect, ECHO_SERVER_ADDR, PROXY_ADDR};
-use tokio_socks::tcp::Socks5Listener;
-use tokio_socks::{tcp::Socks5Stream, Error};
-
-type Result<T> = std::result::Result<T, Error>;
+use tokio_socks::{
+    tcp::{Socks5Listener, Socks5Stream},
+    Result,
+};
 
 #[test]
 fn connect_username_auth() -> Result<()> {

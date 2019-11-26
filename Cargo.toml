@@ -8,17 +8,24 @@ readme = "README.md"
 categories = ["asynchronous", "network-programming"]
 keywords = ["tokio", "async", "proxy", "socks", "socks5"]
 license = "MIT"
-version = "0.1.3"
+version = "0.2.0"
 authors = ["Yilin Chen <sticnarf@gmail.com>"]
 edition = "2018"
 
 [badges]
 travis-ci = { repository = "sticnarf/tokio-socks" }
 
+[features]
+tor = []
+
+[[example]]
+name="tor"
+required-features=["tor"]
+
 [dependencies]
-futures= {version= "0.3.0-alpha.19", package="futures-preview"}
-tokio-net = {version="0.2.0-alpha.6", features=["tcp"]}
-tokio-io = {version="0.2.0-alpha.6", features=["util"]}
+futures= { version= "0.3.0-alpha.19", package="futures-preview" }
+tokio-net = { version="0.2.0-alpha.6", features=["tcp"] }
+tokio-io = { version="0.2.0-alpha.6", features=["util"] }
 bytes = "0.4"
 failure = "0.1"
 derefable = "0.1"

@@ -1,11 +1,13 @@
 mod common;
 
 use common::{runtime, test_bind, test_connect, ECHO_SERVER_ADDR, PROXY_ADDR};
-use tokio_socks::tcp::Socks5Listener;
-use tokio_socks::{tcp::Socks5Stream, Error};
+use tokio_socks::{
+    tcp::{Socks5Listener, Socks5Stream},
+    Result,
+};
 
 #[test]
-fn connect_long_username_password() -> Result<(), Error> {
+fn connect_long_username_password() -> Result<()> {
     let runtime = runtime().lock().unwrap();
     let conn = runtime.block_on(Socks5Stream::connect_with_password(
         PROXY_ADDR, ECHO_SERVER_ADDR, "mylonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglogin",
@@ -14,7 +16,7 @@ fn connect_long_username_password() -> Result<(), Error> {
 }
 
 #[test]
-fn bind_long_username_password() -> Result<(), Error> {
+fn bind_long_username_password() -> Result<()> {
     let bind = {
         let runtime = runtime().lock().unwrap();
         runtime.block_on(Socks5Listener::bind_with_password(
