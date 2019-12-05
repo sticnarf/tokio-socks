@@ -1,23 +1,30 @@
 mod common;
 
-use common::{test_bind, test_connect, ECHO_SERVER_ADDR, PROXY_ADDR};
+use common::{runtime, test_bind, test_connect, ECHO_SERVER_ADDR, PROXY_ADDR};
 use tokio_socks::{
     tcp::{Socks5Listener, Socks5Stream},
-    Error,
+    Result,
 };
 
-type Result<T> = std::result::Result<T, Error>;
-
 #[test]
-fn connect() -> Result<()> {
-    let conn =
-        Socks5Stream::connect_with_password(PROXY_ADDR, ECHO_SERVER_ADDR, "mylonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglogin", "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglongpassword")?;
-    test_connect(conn)
+fn connect_long_username_password() -> Result<()> {
+    let runtime = runtime().lock().unwrap();
+    let conn = runtime.block_on(Socks5Stream::connect_with_password(
+        PROXY_ADDR, ECHO_SERVER_ADDR, "mylonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglogin",
+                                                                    "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglongpassword"))?;
+    runtime.block_on(test_connect(conn))
 }
 
 #[test]
-fn bind() -> Result<()> {
-    let bind =
-        Socks5Listener::bind_with_password(PROXY_ADDR, ECHO_SERVER_ADDR, "mylonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglogin", "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglongpassword")?;
+fn bind_long_username_password() -> Result<()> {
+    let bind = {
+        let runtime = runtime().lock().unwrap();
+        runtime.block_on(Socks5Listener::bind_with_password(
+            PROXY_ADDR,
+            ECHO_SERVER_ADDR,
+            "mylonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglogin",
+            "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglongpassword"
+        ))
+    }?;
     test_bind(bind)
 }

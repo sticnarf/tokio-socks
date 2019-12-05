@@ -9,7 +9,8 @@ pub enum Error {
     /// Failure when parsing a `String`.
     #[fail(display = "{}", _0)]
     ParseError(#[cause] std::string::ParseError),
-    /// Failure due to invalid target address. It contains the detailed error message.
+    /// Failure due to invalid target address. It contains the detailed error
+    /// message.
     #[fail(display = "Target address is invalid: {}", _0)]
     InvalidTargetAddress(&'static str),
     /// Proxy server unreachable.
@@ -71,5 +72,5 @@ impl From<std::io::Error> for Error {
     }
 }
 
-/// Result type of `tokio-socks`
-pub type Result<T> = std::result::Result<T, Error>;
+///// Result type of `tokio-socks`
+// pub type Result<T> = std::result::Result<T, Error>;

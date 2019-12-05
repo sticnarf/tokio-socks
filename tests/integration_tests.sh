@@ -14,7 +14,7 @@ fi
 
 for test in ${list}; do
     3proxy ${dir}/${test}.cfg
-
+    sleep 1
     cargo test --test ${test}
     test_exit_code=$?
 
