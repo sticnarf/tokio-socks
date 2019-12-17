@@ -2,8 +2,7 @@ use either::Either;
 use futures::{
     future,
     stream::{self, Once, Stream},
-    task::Context,
-    Poll,
+    task::{Context, Poll},
 };
 use std::{
     borrow::Cow,
@@ -91,7 +90,7 @@ impl Stream for ProxyAddrsStream {
             Some(Err(_)) => {
                 let err = self.0.take().unwrap().unwrap_err();
                 Poll::Ready(Some(Err(err.into())))
-            },
+            }
             None => unreachable!(),
         }
     }
@@ -236,7 +235,8 @@ impl IntoTargetAddr<'static> for (String, u16) {
 }
 
 impl<'a, T> IntoTargetAddr<'a> for &'a T
-where T: IntoTargetAddr<'a> + Copy
+where
+    T: IntoTargetAddr<'a> + Copy,
 {
     fn into_target_addr(self) -> Result<TargetAddr<'a>> {
         (*self).into_target_addr()
@@ -299,7 +299,9 @@ mod tests {
     }
 
     fn into_target_addr<'a, T>(t: T) -> Result<TargetAddr<'a>>
-    where T: IntoTargetAddr<'a> {
+    where
+        T: IntoTargetAddr<'a>,
+    {
         t.into_target_addr()
     }
 

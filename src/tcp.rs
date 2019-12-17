@@ -1,15 +1,14 @@
 use crate::{Authentication, Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
-use bytes::{Buf, BufMut};
 use derefable::Derefable;
-use futures::{stream, stream::Fuse, task::Context, Poll, Stream, StreamExt};
+use futures::{stream, stream::Fuse, task::{Context, Poll}, Stream, StreamExt};
 use std::{
     borrow::Borrow,
     io,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     pin::Pin,
 };
-use tokio_io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio_net::tcp::TcpStream;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::net::TcpStream;
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -491,23 +490,12 @@ impl Socks5Listener {
 }
 
 impl AsyncRead for Socks5Stream {
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [std::mem::MaybeUninit<u8>]) -> bool {
         AsyncRead::prepare_uninitialized_buffer(&self.tcp, buf)
     }
 
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         AsyncRead::poll_read(Pin::new(&mut self.tcp), cx, buf)
-    }
-
-    fn poll_read_buf<B: BufMut>(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut B,
-    ) -> Poll<io::Result<usize>>
-    where
-        Self: Sized,
-    {
-        AsyncRead::poll_read_buf(Pin::new(&mut self.tcp), cx, buf)
     }
 }
 
@@ -522,10 +510,5 @@ impl AsyncWrite for Socks5Stream {
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         AsyncWrite::poll_shutdown(Pin::new(&mut self.tcp), cx)
-    }
-
-    fn poll_write_buf<B: Buf>(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut B) -> Poll<io::Result<usize>>
-    where Self: Sized {
-        AsyncWrite::poll_write_buf(Pin::new(&mut self.tcp), cx, buf)
     }
 }

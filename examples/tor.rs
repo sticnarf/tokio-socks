@@ -29,6 +29,6 @@ async fn connect() -> Result<(), Error> {
 }
 
 fn main() {
-    let rt = Runtime::new().unwrap();
+    let mut rt = Runtime::new().unwrap();
     rt.block_on(connect()).unwrap();
 }

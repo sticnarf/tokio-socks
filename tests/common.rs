@@ -5,8 +5,7 @@ use std::{
     net::{SocketAddr, TcpStream as StdTcpStream},
     sync::Mutex,
 };
-use tokio::{io::AsyncReadExt, net::TcpListener, runtime::Runtime};
-use tokio_io::AsyncWriteExt;
+use tokio::{io::{AsyncReadExt, AsyncWriteExt, copy}, net::TcpListener, runtime::Runtime};
 use tokio_socks::{
     tcp::{Socks5Listener, Socks5Stream},
     Result,
@@ -17,14 +16,14 @@ pub const ECHO_SERVER_ADDR: &'static str = "localhost:10007";
 pub const MSG: &[u8] = b"hello";
 
 pub async fn echo_server() -> Result<()> {
-    let listener = TcpListener::bind(&SocketAddr::from(([0, 0, 0, 0], 10007))).await?;
+    let mut listener = TcpListener::bind(&SocketAddr::from(([0, 0, 0, 0], 10007))).await?;
     listener
         .incoming()
         .for_each(|tcp_stream| {
             if let Ok(mut stream) = tcp_stream {
                 tokio::spawn(async move {
                     let (mut reader, mut writer) = stream.split();
-                    reader.copy(&mut writer).await.unwrap();
+                    copy(&mut reader, &mut writer).await.unwrap();
                 });
             }
 
@@ -52,7 +51,7 @@ pub fn test_bind(listener: Socks5Listener) -> Result<()> {
     runtime().lock().unwrap().spawn(async move {
         let mut stream = listener.accept().await.unwrap();
         let (mut reader, mut writer) = stream.split();
-        reader.copy(&mut writer).await.unwrap();
+        copy(&mut reader, &mut writer).await.unwrap();
     });
 
     let mut tcp = StdTcpStream::connect(bind_addr)?;

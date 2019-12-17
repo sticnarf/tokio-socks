@@ -23,15 +23,14 @@ name="tor"
 required-features=["tor"]
 
 [dependencies]
-futures= { version= "0.3.0-alpha.19", package="futures-preview" }
-tokio-net = { version="0.2.0-alpha.6", features=["tcp"] }
-tokio-io = { version="0.2.0-alpha.6", features=["util"] }
+futures = "0.3"
+tokio = { version="0.2", default-features = false, features = ["io-util", "stream", "tcp"] }
 bytes = "0.4"
 failure = "0.1"
 derefable = "0.1"
 either = "1"
 
 [dev-dependencies]
-tokio = "0.2.0-alpha.6"
+tokio = { version = "0.2", features = ["io-util"] }
 once_cell = "1.2.0"
-hyper = "0.12.35"
+hyper = "0.13"
