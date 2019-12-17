@@ -8,7 +8,7 @@ use tokio_socks::{
 
 #[test]
 fn connect_username_auth() -> Result<()> {
-    let runtime = runtime().lock().unwrap();
+    let mut runtime = runtime().lock().unwrap();
     let conn = runtime.block_on(Socks5Stream::connect_with_password(
         PROXY_ADDR,
         ECHO_SERVER_ADDR,
@@ -21,7 +21,7 @@ fn connect_username_auth() -> Result<()> {
 #[test]
 fn bind_username_auth() -> Result<()> {
     let bind = {
-        let runtime = runtime().lock().unwrap();
+        let mut runtime = runtime().lock().unwrap();
         runtime.block_on(Socks5Listener::bind_with_password(
             PROXY_ADDR,
             ECHO_SERVER_ADDR,
