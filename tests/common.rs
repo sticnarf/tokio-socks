@@ -5,7 +5,11 @@ use std::{
     net::{SocketAddr, TcpStream as StdTcpStream},
     sync::Mutex,
 };
-use tokio::{io::{AsyncReadExt, AsyncWriteExt, copy}, net::TcpListener, runtime::Runtime};
+use tokio::{
+    io::{copy, AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+    runtime::Runtime,
+};
 use tokio_socks::{
     tcp::{Socks5Listener, Socks5Stream},
     Result,
