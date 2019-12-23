@@ -24,13 +24,12 @@ required-features=["tor"]
 
 [dependencies]
 futures = "0.3"
-tokio = { version="0.2", default-features = false, features = ["io-util", "stream", "tcp"] }
+tokio = { version="0.2", features = ["full"] }
 bytes = "0.4"
 failure = "0.1"
 derefable = "0.1"
 either = "1"
 
 [dev-dependencies]
-tokio = { version = "0.2", features = ["io-util"] }
 once_cell = "1.2.0"
 hyper = "0.13"
