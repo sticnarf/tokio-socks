@@ -7,12 +7,12 @@ use tokio_socks::{
     Result,
 };
 
-#[test]
-fn connect_no_auth() -> Result<()> {
-    let mut runtime = runtime().lock().unwrap();
-    let conn = runtime.block_on(Socks5Stream::connect(PROXY_ADDR, ECHO_SERVER_ADDR))?;
-    runtime.block_on(test_connect(conn))
-}
+// #[test]
+// fn connect_no_auth() -> Result<()> {
+//     let mut runtime = runtime().lock().unwrap();
+//     let conn = runtime.block_on(Socks5Stream::connect(PROXY_ADDR, ECHO_SERVER_ADDR))?;
+//     runtime.block_on(test_connect(conn))
+// }
 
 #[test]
 fn bind_no_auth() -> Result<()> {
