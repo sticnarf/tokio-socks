@@ -15,7 +15,7 @@ fi
 for test in ${list}; do
     3proxy ${dir}/${test}.cfg
     sleep 1
-    cargo test --test ${test}
+    cargo test --test ${test} -j1
     test_exit_code=$?
 
     pkill -F /tmp/3proxy-test.pid
