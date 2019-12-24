@@ -8,7 +8,7 @@ use tokio_socks::{
 
 #[test]
 fn connect_long_username_password() -> Result<()> {
-    let runtime = runtime().lock().unwrap();
+    let mut runtime = runtime().lock().unwrap();
     let conn = runtime.block_on(Socks5Stream::connect_with_password(
         PROXY_ADDR, ECHO_SERVER_ADDR, "mylonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglogin",
                                                                     "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglongpassword"))?;
@@ -18,7 +18,7 @@ fn connect_long_username_password() -> Result<()> {
 #[test]
 fn bind_long_username_password() -> Result<()> {
     let bind = {
-        let runtime = runtime().lock().unwrap();
+        let mut runtime = runtime().lock().unwrap();
         runtime.block_on(Socks5Listener::bind_with_password(
             PROXY_ADDR,
             ECHO_SERVER_ADDR,
