@@ -27,7 +27,6 @@ futures = "0.3"
 tokio = { version="0.2", features = ["io-util", "stream", "tcp"] }
 bytes = "0.4"
 failure = "0.1"
-derefable = "0.1"
 either = "1"
 
 [dev-dependencies]
