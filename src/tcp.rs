@@ -1,5 +1,4 @@
 use crate::{Authentication, Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
-use derefable::Derefable;
 use futures::{
     stream,
     stream::Fuse,
@@ -10,6 +9,7 @@ use std::{
     borrow::Borrow,
     io,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    ops::{Deref, DerefMut},
     pin::Pin,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -31,11 +31,24 @@ enum Command {
 /// A SOCKS5 client.
 ///
 /// For convenience, it can be dereferenced to `tokio_tcp::TcpStream`.
-#[derive(Debug, Derefable)]
+#[derive(Debug)]
 pub struct Socks5Stream {
-    #[deref(mutable)]
     tcp: TcpStream,
     target: TargetAddr<'static>,
+}
+
+impl Deref for Socks5Stream {
+    type Target = TcpStream;
+
+    fn deref(&self) -> &Self::Target {
+        &self.tcp
+    }
+}
+
+impl DerefMut for Socks5Stream {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.tcp
+    }
 }
 
 impl Socks5Stream {
