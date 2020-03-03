@@ -1,3 +1,7 @@
+# 0.2.1
+
+* Remove dependency derefable (#16)
+
 # 0.2.0
 
 * Support tokio 0.2 (#10)
