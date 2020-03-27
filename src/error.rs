@@ -1,76 +1,69 @@
-use failure::Fail;
-
 /// Error type of `tokio-socks`
-#[derive(Fail, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
     /// Failure caused by an IO error.
-    #[fail(display = "{}", _0)]
-    Io(#[cause] std::io::Error),
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
     /// Failure when parsing a `String`.
-    #[fail(display = "{}", _0)]
-    ParseError(#[cause] std::string::ParseError),
+    #[error("{0}")]
+    ParseError(#[from] std::string::ParseError),
     /// Failure due to invalid target address. It contains the detailed error
     /// message.
-    #[fail(display = "Target address is invalid: {}", _0)]
+    #[error("Target address is invalid: {0}")]
     InvalidTargetAddress(&'static str),
     /// Proxy server unreachable.
-    #[fail(display = "Proxy server unreachable")]
+    #[error("Proxy server unreachable")]
     ProxyServerUnreachable,
     /// Proxy server returns an invalid version number.
-    #[fail(display = "Invalid response version")]
+    #[error("Invalid response version")]
     InvalidResponseVersion,
     /// No acceptable auth methods
-    #[fail(display = "No acceptable auth methods")]
+    #[error("No acceptable auth methods")]
     NoAcceptableAuthMethods,
     /// Unknown auth method
-    #[fail(display = "Unknown auth method")]
+    #[error("Unknown auth method")]
     UnknownAuthMethod,
     /// General SOCKS server failure
-    #[fail(display = "General SOCKS server failure")]
+    #[error("General SOCKS server failure")]
     GeneralSocksServerFailure,
     /// Connection not allowed by ruleset
-    #[fail(display = "Connection not allowed by ruleset")]
+    #[error("Connection not allowed by ruleset")]
     ConnectionNotAllowedByRuleset,
     /// Network unreachable
-    #[fail(display = "Network unreachable")]
+    #[error("Network unreachable")]
     NetworkUnreachable,
     /// Host unreachable
-    #[fail(display = "Host unreachable")]
+    #[error("Host unreachable")]
     HostUnreachable,
     /// Connection refused
-    #[fail(display = "Connection refused")]
+    #[error("Connection refused")]
     ConnectionRefused,
     /// TTL expired
-    #[fail(display = "TTL expired")]
+    #[error("TTL expired")]
     TtlExpired,
     /// Command not supported
-    #[fail(display = "Command not supported")]
+    #[error("Command not supported")]
     CommandNotSupported,
     /// Address type not supported
-    #[fail(display = "Address type not supported")]
+    #[error("Address type not supported")]
     AddressTypeNotSupported,
     /// Unknown error
-    #[fail(display = "Unknown error")]
+    #[error("Unknown error")]
     UnknownError,
     /// Invalid reserved byte
-    #[fail(display = "Invalid reserved byte")]
+    #[error("Invalid reserved byte")]
     InvalidReservedByte,
     /// Unknown address type
-    #[fail(display = "Unknown address type")]
+    #[error("Unknown address type")]
     UnknownAddressType,
     /// Invalid authentication values. It contains the detailed error message.
-    #[fail(display = "Invalid auth values: {}", _0)]
+    #[error("Invalid auth values: {0}")]
     InvalidAuthValues(&'static str),
     /// Password auth failure
-    #[fail(display = "Password auth failure, code: {}", _0)]
+    #[error("Password auth failure, code: {0}")]
     PasswordAuthFailure(u8),
 }
 
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
-        Error::Io(err)
-    }
-}
 
 ///// Result type of `tokio-socks`
 // pub type Result<T> = std::result::Result<T, Error>;
