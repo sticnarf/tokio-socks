@@ -1,3 +1,7 @@
+# 0.2.2
+
+* Replace failure with thiserror (#17)
+
 # 0.2.1
 
 * Remove dependency derefable (#16)
