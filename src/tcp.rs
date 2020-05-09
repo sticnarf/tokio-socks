@@ -12,8 +12,21 @@ use std::{
     ops::{Deref, DerefMut},
     pin::Pin,
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::net::TcpStream;
+
+#[cfg(feature = "smol_executor")]
+mod types {
+    pub use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
+    use smol::Async;
+    pub type AsyncTcpStream = Async<std::net::TcpStream>;
+}
+#[cfg(feature = "tokio_executor")]
+mod types {
+    pub use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+    pub type AsyncTcpStream = tokio::net::TcpStream;
+}
+
+use self::types::*;
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -33,12 +46,12 @@ enum Command {
 /// For convenience, it can be dereferenced to `tokio_tcp::TcpStream`.
 #[derive(Debug)]
 pub struct Socks5Stream {
-    tcp: TcpStream,
+    tcp: AsyncTcpStream,
     target: TargetAddr<'static>,
 }
 
 impl Deref for Socks5Stream {
-    type Target = TcpStream;
+    type Target = AsyncTcpStream;
 
     fn deref(&self) -> &Self::Target {
         &self.tcp
@@ -150,8 +163,8 @@ impl Socks5Stream {
         Ok(sock)
     }
 
-    /// Consumes the `Socks5Stream`, returning the inner `tokio_tcp::TcpStream`.
-    pub fn into_inner(self) -> TcpStream {
+    /// Consumes the `Socks5Stream`, returning the inner `AsyncTcpStream`.
+    pub fn into_inner(self) -> AsyncTcpStream {
         self.tcp
     }
 
@@ -197,7 +210,7 @@ where
     /// Connect to the proxy server, authenticate and issue the SOCKS command
     pub async fn execute(&mut self) -> Result<Socks5Stream> {
         let next_addr = self.proxy.select_next_some().await?;
-        let mut tcp = TcpStream::connect(next_addr)
+        let mut tcp = AsyncTcpStream::connect(next_addr)
             .await
             .map_err(|_| Error::ProxyServerUnreachable)?;
 
@@ -288,7 +301,7 @@ where
         self.len = 4;
     }
 
-    async fn password_authentication_protocol(&mut self, tcp: &mut TcpStream) -> Result<()> {
+    async fn password_authentication_protocol(&mut self, tcp: &mut AsyncTcpStream) -> Result<()> {
         self.prepare_send_password_auth();
         tcp.write_all(&self.buf[self.ptr..self.len]).await?;
 
@@ -305,7 +318,7 @@ where
         Ok(())
     }
 
-    async fn authenticate(&mut self, tcp: &mut TcpStream) -> Result<()> {
+    async fn authenticate(&mut self, tcp: &mut AsyncTcpStream) -> Result<()> {
         // Write request to connect/authenticate
         self.prepare_send_method_selection();
         tcp.write_all(&self.buf[self.ptr..self.len]).await?;
@@ -333,9 +346,9 @@ where
         Ok(())
     }
 
-    async fn receive_reply(&mut self, tcp: &mut TcpStream) -> Result<TargetAddr<'static>> {
+    async fn receive_reply(&mut self, tcp: &mut AsyncTcpStream) -> Result<TargetAddr<'static>> {
         self.prepare_recv_reply();
-        self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+        self.read_exact_and_increment(tcp).await?;
         if self.buf[0] != 0x05 {
             return Err(Error::InvalidResponseVersion);
         }
@@ -368,13 +381,13 @@ where
             // Domain
             0x03 => {
                 self.len = 5;
-                self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+                self.read_exact_and_increment(tcp).await?;
                 self.len += self.buf[4] as usize + 2;
             }
             _ => Err(Error::UnknownAddressType)?,
         }
 
-        self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+        self.read_exact_and_increment(tcp).await?;
         let target: TargetAddr<'static> = match self.buf[3] {
             // IPv4
             0x01 => {
@@ -404,6 +417,13 @@ where
         };
 
         Ok(target)
+    }
+
+    async fn read_exact_and_increment(&mut self, tcp: &mut AsyncTcpStream) -> Result<()> {
+        let read_len = self.len - self.ptr;
+        tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+        self.ptr += read_len;
+        Ok(())
     }
 }
 
@@ -509,6 +529,7 @@ impl Socks5Listener {
 }
 
 impl AsyncRead for Socks5Stream {
+    #[cfg(feature = "tokio_executor")]
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [std::mem::MaybeUninit<u8>]) -> bool {
         AsyncRead::prepare_uninitialized_buffer(&self.tcp, buf)
     }
@@ -527,6 +548,13 @@ impl AsyncWrite for Socks5Stream {
         AsyncWrite::poll_flush(Pin::new(&mut self.tcp), cx)
     }
 
+    // variant for features.rs
+    #[cfg(feature = "smol_executor")]
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_close(Pin::new(&mut self.tcp), cx)
+    }
+
+    #[cfg(feature = "tokio_executor")]
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         AsyncWrite::poll_shutdown(Pin::new(&mut self.tcp), cx)
     }
