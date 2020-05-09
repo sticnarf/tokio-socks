@@ -17,6 +17,9 @@ travis-ci = { repository = "sticnarf/tokio-socks" }
 
 [features]
 tor = []
+smol_executor = [ "smol"]
+tokio_executor = [ "tokio"]
+default = ["tokio_executor"]
 
 [[example]]
 name = "tor"
@@ -24,10 +27,11 @@ required-features = ["tor"]
 
 [dependencies]
 futures = "0.3"
-tokio = { version="0.2", features = ["io-util", "stream", "tcp"] }
+tokio = { version="0.2", features = ["io-util", "stream", "tcp"], optional=true }
 bytes = "0.4"
 either = "1"
 thiserror = "1.0"
+smol = { version="0.1", optional=true }
 
 [dev-dependencies]
 tokio = { version = "0.2", features = ["io-util", "rt-threaded"] }
