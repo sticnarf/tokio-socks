@@ -51,8 +51,10 @@ impl<S> DerefMut for Socks5Stream<S> {
     }
 }
 
-impl<S> Socks5Stream<S> {
-    /// Connects to a target server through a SOCKS5 proxy.
+impl<S> Socks5Stream<S> 
+    where S: AsyncRead + AsyncWrite + Unpin,
+{
+    /// Connects to a target server through a SOCKS5 proxy given the proxy address.
     ///
     /// # Error
     ///
@@ -66,8 +68,21 @@ impl<S> Socks5Stream<S> {
         Self::execute_command(proxy, target, Authentication::None, Command::Connect).await
     }
 
+    /// Connects to a target server through a SOCKS5 proxy given a socket to it.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to
+    /// `TargetAddr`.
+    pub async fn connect_via<'t, T>(socket: S, target: T) -> Result<Socks5Stream<S>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        Self::execute_command_via(socket, target, Authentication::None, Command::Connect).await
+    }
+
     /// Connects to a target server through a SOCKS5 proxy using given username
-    /// and password.
+    /// , password and the address of the proxy.
     ///
     /// # Error
     ///
@@ -85,6 +100,31 @@ impl<S> Socks5Stream<S> {
     {
         Self::execute_command(
             proxy,
+            target,
+            Authentication::Password { username, password },
+            Command::Connect,
+        )
+        .await
+    }
+
+    /// Connects to a target server through a SOCKS5 proxy using given username
+    /// , password and a socket to the proxy
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to
+    /// `TargetAddr`.
+    pub async fn connect_with_password_via<'a, 't, T>(
+        socket: S,
+        target: T,
+        username: &'a str,
+        password: &'a str,
+    ) -> Result<Socks5Stream<S>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        Self::execute_command_via(
+            socket,
             target,
             Authentication::Password { username, password },
             Command::Connect,
@@ -121,12 +161,32 @@ impl<S> Socks5Stream<S> {
     }
 
     #[cfg(feature = "tor")]
+    pub async fn tor_resolve_via<'t, P, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        let sock = Self::execute_command_via(socket, target, Authentication::None, Command::TorResolve).await?;
+
+        Ok(sock.target_addr().to_owned())
+    }
+
+    #[cfg(feature = "tor")]
     pub async fn tor_resolve_ptr<'t, P, T>(proxy: P, target: T) -> Result<TargetAddr<'static>>
     where
         P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
     {
         let sock = Self::execute_command(proxy, target, Authentication::None, Command::TorResolvePtr).await?;
+
+        Ok(sock.target_addr().to_owned())
+    }
+
+    #[cfg(feature = "tor")]
+    pub async fn tor_resolve_ptr_via<'t, P, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        let sock = Self::execute_command_via(socket, target, Authentication::None, Command::TorResolvePtr).await?;
 
         Ok(sock.target_addr().to_owned())
     }
@@ -145,6 +205,24 @@ impl<S> Socks5Stream<S> {
 
         let sock = SocksConnector::new(auth, command, proxy.to_proxy_addrs().fuse(), target.into_target_addr()?)
             .execute()
+            .await?;
+
+        Ok(sock)
+    }
+
+    async fn execute_command_via<'a, 't, T>(
+        socket: S,
+        target: T,
+        auth: Authentication<'a>,
+        command: Command,
+    ) -> Result<Socks5Stream<S>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        Self::validate_auth(&auth)?;
+
+        let sock = SocksConnector::new(auth, command, stream::empty().fuse(), target.into_target_addr()?)
+            .execute_with_socket(socket)
             .await?;
 
         Ok(sock)
@@ -193,23 +271,27 @@ where
             len: 0,
         }
     }
-
+    
     /// Connect to the proxy server, authenticate and issue the SOCKS command
     pub async fn execute(&mut self) -> Result<Socks5Stream<TcpStream>> {
         let next_addr = self.proxy.select_next_some().await?;
-        let mut tcp = TcpStream::connect(next_addr)
+        let tcp = TcpStream::connect(next_addr)
             .await
             .map_err(|_| Error::ProxyServerUnreachable)?;
 
-        self.authenticate(&mut tcp).await?;
+        self.execute_with_socket(tcp).await
+    }
+
+    pub async fn execute_with_socket<T: AsyncRead + AsyncWrite + Unpin>(&mut self, mut socket: T) -> Result<Socks5Stream<T>> {
+        self.authenticate(&mut socket).await?;
 
         // Send request address that should be proxied
         self.prepare_send_request();
-        tcp.write_all(&self.buf[self.ptr..self.len]).await?;
+        socket.write_all(&self.buf[self.ptr..self.len]).await?;
 
-        let target = self.receive_reply(&mut tcp).await?;
+        let target = self.receive_reply(&mut socket).await?;
 
-        Ok(Socks5Stream { socket: tcp, target })
+        Ok(Socks5Stream { socket, target })
     }
 
     fn prepare_send_method_selection(&mut self) {
