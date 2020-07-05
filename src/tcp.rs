@@ -74,11 +74,11 @@ impl<S> Socks5Stream<S>
     ///
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
-    pub async fn connect_via<'t, T>(socket: S, target: T) -> Result<Socks5Stream<S>>
+    pub async fn connect_with_socket<'t, T>(socket: S, target: T) -> Result<Socks5Stream<S>>
     where
         T: IntoTargetAddr<'t>,
     {
-        Self::execute_command_via(socket, target, Authentication::None, Command::Connect).await
+        Self::execute_command_with_socket(socket, target, Authentication::None, Command::Connect).await
     }
 
     /// Connects to a target server through a SOCKS5 proxy using given username
@@ -114,7 +114,7 @@ impl<S> Socks5Stream<S>
     ///
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
-    pub async fn connect_with_password_via<'a, 't, T>(
+    pub async fn connect_with_password_with_socket<'a, 't, T>(
         socket: S,
         target: T,
         username: &'a str,
@@ -123,7 +123,7 @@ impl<S> Socks5Stream<S>
     where
         T: IntoTargetAddr<'t>,
     {
-        Self::execute_command_via(
+        Self::execute_command_with_socket(
             socket,
             target,
             Authentication::Password { username, password },
@@ -161,11 +161,11 @@ impl<S> Socks5Stream<S>
     }
 
     #[cfg(feature = "tor")]
-    pub async fn tor_resolve_via<'t, P, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
+    pub async fn tor_resolve_with_socket<'t, P, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
     where
         T: IntoTargetAddr<'t>,
     {
-        let sock = Self::execute_command_via(socket, target, Authentication::None, Command::TorResolve).await?;
+        let sock = Self::execute_command_with_socket(socket, target, Authentication::None, Command::TorResolve).await?;
 
         Ok(sock.target_addr().to_owned())
     }
@@ -182,11 +182,11 @@ impl<S> Socks5Stream<S>
     }
 
     #[cfg(feature = "tor")]
-    pub async fn tor_resolve_ptr_via<'t, P, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
+    pub async fn tor_resolve_ptr_with_socket<'t, P, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
     where
         T: IntoTargetAddr<'t>,
     {
-        let sock = Self::execute_command_via(socket, target, Authentication::None, Command::TorResolvePtr).await?;
+        let sock = Self::execute_command_with_socket(socket, target, Authentication::None, Command::TorResolvePtr).await?;
 
         Ok(sock.target_addr().to_owned())
     }
@@ -210,7 +210,7 @@ impl<S> Socks5Stream<S>
         Ok(sock)
     }
 
-    async fn execute_command_via<'a, 't, T>(
+    async fn execute_command_with_socket<'a, 't, T>(
         socket: S,
         target: T,
         auth: Authentication<'a>,
@@ -527,11 +527,11 @@ impl<S> Socks5Listener<S>
     ///
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
-    pub async fn bind_via<'t, T>(socket: S, target: T) -> Result<Socks5Listener<S>>
+    pub async fn bind_with_socket<'t, T>(socket: S, target: T) -> Result<Socks5Listener<S>>
     where
         T: IntoTargetAddr<'t>,
     {
-        Self::bind_with_auth_via(Authentication::None, socket, target).await
+        Self::bind_with_auth_with_socket(Authentication::None, socket, target).await
     }
 
     /// Initiates a BIND request to the specified proxy using given username
@@ -567,7 +567,7 @@ impl<S> Socks5Listener<S>
     ///
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
-    pub async fn bind_with_password_via<'a, 't, T>(
+    pub async fn bind_with_password_with_socket<'a, 't, T>(
         socket: S,
         target: T,
         username: &'a str,
@@ -576,7 +576,7 @@ impl<S> Socks5Listener<S>
     where
         T: IntoTargetAddr<'t>,
     {
-        Self::bind_with_auth_via(Authentication::Password { username, password }, socket, target).await
+        Self::bind_with_auth_with_socket(Authentication::Password { username, password }, socket, target).await
     }
 
     async fn bind_with_auth<'t, P, T>(auth: Authentication<'_>, proxy: P, target: T) -> Result<Socks5Listener<TcpStream>>
@@ -596,7 +596,7 @@ impl<S> Socks5Listener<S>
         Ok(Socks5Listener { inner: socket })
     }
 
-    async fn bind_with_auth_via<'t, T>(auth: Authentication<'_>, socket: S, target: T) -> Result<Socks5Listener<S>>
+    async fn bind_with_auth_with_socket<'t, T>(auth: Authentication<'_>, socket: S, target: T) -> Result<Socks5Listener<S>>
     where
         T: IntoTargetAddr<'t>,
     {
