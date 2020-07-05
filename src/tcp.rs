@@ -518,6 +518,22 @@ impl<S> Socks5Listener<S>
         Self::bind_with_auth(Authentication::None, proxy, target).await
     }
 
+    /// Initiates a BIND request to the specified proxy.
+    ///
+    /// The proxy will filter incoming connections based on the value of
+    /// `target`.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to
+    /// `TargetAddr`.
+    pub async fn bind_via<'t, T>(socket: S, target: T) -> Result<Socks5Listener<S>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        Self::bind_with_auth_via(Authentication::None, socket, target).await
+    }
+
     /// Initiates a BIND request to the specified proxy using given username
     /// and password.
     ///
@@ -541,6 +557,28 @@ impl<S> Socks5Listener<S>
         Self::bind_with_auth(Authentication::Password { username, password }, proxy, target).await
     }
 
+    /// Initiates a BIND request to the specified proxy using given username
+    /// and password.
+    ///
+    /// The proxy will filter incoming connections based on the value of
+    /// `target`.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to
+    /// `TargetAddr`.
+    pub async fn bind_with_password_via<'a, 't, T>(
+        socket: S,
+        target: T,
+        username: &'a str,
+        password: &'a str,
+    ) -> Result<Socks5Listener<S>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        Self::bind_with_auth_via(Authentication::Password { username, password }, socket, target).await
+    }
+
     async fn bind_with_auth<'t, P, T>(auth: Authentication<'_>, proxy: P, target: T) -> Result<Socks5Listener<TcpStream>>
     where
         P: ToProxyAddrs,
@@ -553,6 +591,22 @@ impl<S> Socks5Listener<S>
             target.into_target_addr()?,
         )
         .execute()
+        .await?;
+
+        Ok(Socks5Listener { inner: socket })
+    }
+
+    async fn bind_with_auth_via<'t, T>(auth: Authentication<'_>, socket: S, target: T) -> Result<Socks5Listener<S>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        let socket = SocksConnector::new(
+            auth,
+            Command::Bind,
+            stream::empty().fuse(),
+            target.into_target_addr()?,
+        )
+        .execute_with_socket(socket)
         .await?;
 
         Ok(Socks5Listener { inner: socket })
