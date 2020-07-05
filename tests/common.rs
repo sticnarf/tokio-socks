@@ -8,6 +8,7 @@ use std::{
 use tokio::{
     io::{copy, AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
+    net::TcpStream,
     runtime::Runtime,
 };
 use tokio_socks::{
@@ -37,20 +38,20 @@ pub async fn echo_server() -> Result<()> {
     Ok(())
 }
 
-pub async fn reply_response(mut socket: Socks5Stream) -> Result<[u8; 5]> {
+pub async fn reply_response(mut socket: Socks5Stream<TcpStream>) -> Result<[u8; 5]> {
     socket.write_all(MSG).await?;
     let mut buf = [0; 5];
     socket.read_exact(&mut buf).await?;
     Ok(buf)
 }
 
-pub async fn test_connect(socket: Socks5Stream) -> Result<()> {
+pub async fn test_connect(socket: Socks5Stream<TcpStream>) -> Result<()> {
     let res = reply_response(socket).await?;
     assert_eq!(&res[..], MSG);
     Ok(())
 }
 
-pub fn test_bind(listener: Socks5Listener) -> Result<()> {
+pub fn test_bind(listener: Socks5Listener<TcpStream>) -> Result<()> {
     let bind_addr = listener.bind_addr().to_owned();
     runtime().lock().unwrap().spawn(async move {
         let mut stream = listener.accept().await.unwrap();

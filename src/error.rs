@@ -64,6 +64,5 @@ pub enum Error {
     PasswordAuthFailure(u8),
 }
 
-
 ///// Result type of `tokio-socks`
 // pub type Result<T> = std::result::Result<T, Error>;
