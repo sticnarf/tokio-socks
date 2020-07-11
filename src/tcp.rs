@@ -196,7 +196,7 @@ where S: AsyncRead + AsyncWrite + Unpin
 
 
     #[cfg(feature = "tor")]
-    pub async fn tor_resolve_with_socket<'t, P, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
+    pub async fn tor_resolve_with_socket<'t, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
     where T: IntoTargetAddr<'t> {
         let sock = Self::execute_command_with_socket(socket, target, Authentication::None, Command::TorResolve).await?;
 
@@ -204,7 +204,7 @@ where S: AsyncRead + AsyncWrite + Unpin
     }
 
     #[cfg(feature = "tor")]
-    pub async fn tor_resolve_ptr_with_socket<'t, P, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
+    pub async fn tor_resolve_ptr_with_socket<'t, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
     where T: IntoTargetAddr<'t> {
         let sock =
             Self::execute_command_with_socket(socket, target, Authentication::None, Command::TorResolvePtr).await?;
