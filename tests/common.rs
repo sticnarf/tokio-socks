@@ -6,16 +6,17 @@ use std::{
     sync::Mutex,
 };
 use tokio::{
-    io::{copy, AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
-    net::TcpStream,
+    io::{copy, split, AsyncReadExt, AsyncWriteExt, AsyncRead, AsyncWrite},
+    net::{TcpListener, UnixStream},
     runtime::Runtime,
 };
 use tokio_socks::{
     tcp::{Socks5Listener, Socks5Stream},
+    Error,
     Result,
 };
 
+pub const UNIX_PROXY_ADDR: &'static str = "/tmp/proxy.s";
 pub const PROXY_ADDR: &'static str = "127.0.0.1:41080";
 pub const ECHO_SERVER_ADDR: &'static str = "localhost:10007";
 pub const MSG: &[u8] = b"hello";
@@ -38,24 +39,24 @@ pub async fn echo_server() -> Result<()> {
     Ok(())
 }
 
-pub async fn reply_response(mut socket: Socks5Stream<TcpStream>) -> Result<[u8; 5]> {
+pub async fn reply_response<S: AsyncRead + AsyncWrite + Unpin>(mut socket: Socks5Stream<S>) -> Result<[u8; 5]> {
     socket.write_all(MSG).await?;
     let mut buf = [0; 5];
     socket.read_exact(&mut buf).await?;
     Ok(buf)
 }
 
-pub async fn test_connect(socket: Socks5Stream<TcpStream>) -> Result<()> {
+pub async fn test_connect<S: AsyncRead + AsyncWrite + Unpin>(socket: Socks5Stream<S>) -> Result<()> {
     let res = reply_response(socket).await?;
     assert_eq!(&res[..], MSG);
     Ok(())
 }
 
-pub fn test_bind(listener: Socks5Listener<TcpStream>) -> Result<()> {
+pub fn test_bind<S: 'static + AsyncRead + AsyncWrite + Unpin + Send>(listener: Socks5Listener<S>) -> Result<()> {
     let bind_addr = listener.bind_addr().to_owned();
     runtime().lock().unwrap().spawn(async move {
-        let mut stream = listener.accept().await.unwrap();
-        let (mut reader, mut writer) = stream.split();
+        let stream = listener.accept().await.unwrap();
+        let (mut reader, mut writer) = split(stream);
         copy(&mut reader, &mut writer).await.unwrap();
     });
 
@@ -65,6 +66,10 @@ pub fn test_bind(listener: Socks5Listener<TcpStream>) -> Result<()> {
     tcp.read_exact(&mut buf[..])?;
     assert_eq!(&buf[..], MSG);
     Ok(())
+}
+
+pub async fn connect_unix() -> Result<UnixStream> {
+    UnixStream::connect(UNIX_PROXY_ADDR).await.map_err(Error::Io)
 }
 
 pub fn runtime() -> &'static Mutex<Runtime> {

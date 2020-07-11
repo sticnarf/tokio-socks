@@ -2,6 +2,9 @@
 set -x
 
 dir="$(dirname "$(which "$0")")"
+SOCK="/tmp/proxy.s"
+PROXY_HOST="127.0.0.1:41080"
+
 
 #socat tcp-listen:10007,fork exec:cat &
 #echo $! > /tmp/socat-test.pid
@@ -11,6 +14,8 @@ if test -z "$@"; then
 else
     list="$@"
 fi
+
+socat UNIX-LISTEN:${SOCK},reuseaddr,fork TCP:${PROXY_HOST} &
 
 for test in ${list}; do
     3proxy ${dir}/${test}.cfg

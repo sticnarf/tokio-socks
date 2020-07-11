@@ -159,7 +159,7 @@ where S: AsyncRead + AsyncWrite + Unpin
     ///
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
-    pub async fn connect_with_password_with_socket<'a, 't, T>(
+    pub async fn connect_with_password_and_socket<'a, 't, T>(
         socket: S,
         target: T,
         username: &'a str,
@@ -594,7 +594,7 @@ where S: AsyncRead + AsyncWrite + Unpin
     ///
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
-    pub async fn bind_with_password_with_socket<'a, 't, T>(
+    pub async fn bind_with_password_and_socket<'a, 't, T>(
         socket: S,
         target: T,
         username: &'a str,
