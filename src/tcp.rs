@@ -97,6 +97,8 @@ impl Socks5Stream<TcpStream> {
     }
 
     #[cfg(feature = "tor")]
+    /// Resolve the domain name to an ip using special Tor Resolve command, by connecting to a Tor
+    /// compatible proxy given it's address.
     pub async fn tor_resolve<'t, P, T>(proxy: P, target: T) -> Result<TargetAddr<'static>>
     where
         P: ToProxyAddrs,
@@ -108,6 +110,8 @@ impl Socks5Stream<TcpStream> {
     }
 
     #[cfg(feature = "tor")]
+    /// Perform a reverse DNS query on the given ip using special Tor Resolve PTR command, by connecting to a Tor
+    /// compatible proxy given it's address.
     pub async fn tor_resolve_ptr<'t, P, T>(proxy: P, target: T) -> Result<TargetAddr<'static>>
     where
         P: ToProxyAddrs,
@@ -152,8 +156,8 @@ where S: AsyncRead + AsyncWrite + Unpin
         Self::execute_command_with_socket(socket, target, Authentication::None, Command::Connect).await
     }
 
-    /// Connects to a target server through a SOCKS5 proxy using given username
-    /// , password and a socket to the proxy
+    /// Connects to a target server through a SOCKS5 proxy using given username,
+    /// password and a socket to the proxy
     ///
     /// # Error
     ///
@@ -196,6 +200,8 @@ where S: AsyncRead + AsyncWrite + Unpin
 
 
     #[cfg(feature = "tor")]
+    /// Resolve the domain name to an ip using special Tor Resolve command, by connecting to a Tor
+    /// compatible proxy given a socket to it.
     pub async fn tor_resolve_with_socket<'t, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
     where T: IntoTargetAddr<'t> {
         let sock = Self::execute_command_with_socket(socket, target, Authentication::None, Command::TorResolve).await?;
@@ -204,6 +210,8 @@ where S: AsyncRead + AsyncWrite + Unpin
     }
 
     #[cfg(feature = "tor")]
+    /// Perform a reverse DNS query on the given ip using special Tor Resolve PTR command, by connecting to a Tor
+    /// compatible proxy given a socket to it.
     pub async fn tor_resolve_ptr_with_socket<'t, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
     where T: IntoTargetAddr<'t> {
         let sock =
@@ -570,7 +578,7 @@ impl Socks5Listener<TcpStream> {
 impl<S> Socks5Listener<S>
 where S: AsyncRead + AsyncWrite + Unpin
 {
-    /// Initiates a BIND request to the specified proxy.
+    /// Initiates a BIND request to the specified proxy using the given socket to it.
     ///
     /// The proxy will filter incoming connections based on the value of
     /// `target`.
@@ -584,8 +592,8 @@ where S: AsyncRead + AsyncWrite + Unpin
         Self::bind_with_auth_and_socket(Authentication::None, socket, target).await
     }
 
-    /// Initiates a BIND request to the specified proxy using given username
-    /// and password.
+    /// Initiates a BIND request to the specified proxy using given username,
+    /// password and socket to the proxy.
     ///
     /// The proxy will filter incoming connections based on the value of
     /// `target`.
