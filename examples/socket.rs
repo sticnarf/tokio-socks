@@ -15,8 +15,8 @@ const ONION_ADDR: &str = "3g2upl4pq6kufc4m.onion:80"; // DuckDuckGo
 
 async fn connect() -> Result<(), Error> {
     // This require Tor to listen on and Unix Domain Socket.
-    // You have to create a directory /tmp/tor owned by tor, and for which only tor has rights, and
-    // add the following line to your torrc :
+    // You have to create a directory /tmp/tor owned by tor, and for which only tor
+    // has rights, and add the following line to your torrc :
     // SocksPort unix:/tmp/tor/socket.s
     let socket = UnixStream::connect(UNIX_PROXY_ADDR).await?;
     let target = Socks5Stream::tor_resolve_with_socket(socket, "duckduckgo.com:0").await?;

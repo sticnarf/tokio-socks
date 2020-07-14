@@ -20,7 +20,7 @@ socat UNIX-LISTEN:${SOCK},reuseaddr,fork TCP:${PROXY_HOST} &
 for test in ${list}; do
     3proxy ${dir}/${test}.cfg
     sleep 1
-    cargo test --test ${test}
+    cargo test --test ${test} -- --test-threads 1
     test_exit_code=$?
 
     pkill -F /tmp/3proxy-test.pid
