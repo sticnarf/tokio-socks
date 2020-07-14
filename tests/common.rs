@@ -6,7 +6,7 @@ use std::{
     sync::Mutex,
 };
 use tokio::{
-    io::{copy, split, AsyncReadExt, AsyncWriteExt, AsyncRead, AsyncWrite},
+    io::{copy, split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{TcpListener, UnixStream},
     runtime::Runtime,
 };
