@@ -3,7 +3,8 @@ use futures::{
     stream,
     stream::Fuse,
     task::{Context, Poll},
-    Stream, StreamExt,
+    Stream,
+    StreamExt,
 };
 use std::{
     borrow::Borrow,
@@ -12,8 +13,10 @@ use std::{
     ops::{Deref, DerefMut},
     pin::Pin,
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::net::TcpStream;
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    net::TcpStream,
+};
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -30,35 +33,36 @@ enum Command {
 
 /// A SOCKS5 client.
 ///
-/// For convenience, it can be dereferenced to `tokio_tcp::TcpStream`.
+/// For convenience, it can be dereferenced to it's inner socket.
 #[derive(Debug)]
-pub struct Socks5Stream {
-    tcp: TcpStream,
+pub struct Socks5Stream<S> {
+    socket: S,
     target: TargetAddr<'static>,
 }
 
-impl Deref for Socks5Stream {
-    type Target = TcpStream;
+impl<S> Deref for Socks5Stream<S> {
+    type Target = S;
 
     fn deref(&self) -> &Self::Target {
-        &self.tcp
+        &self.socket
     }
 }
 
-impl DerefMut for Socks5Stream {
+impl<S> DerefMut for Socks5Stream<S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.tcp
+        &mut self.socket
     }
 }
 
-impl Socks5Stream {
-    /// Connects to a target server through a SOCKS5 proxy.
+impl Socks5Stream<TcpStream> {
+    /// Connects to a target server through a SOCKS5 proxy given the proxy
+    /// address.
     ///
     /// # Error
     ///
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
-    pub async fn connect<'t, P, T>(proxy: P, target: T) -> Result<Self>
+    pub async fn connect<'t, P, T>(proxy: P, target: T) -> Result<Socks5Stream<TcpStream>>
     where
         P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
@@ -66,8 +70,8 @@ impl Socks5Stream {
         Self::execute_command(proxy, target, Authentication::None, Command::Connect).await
     }
 
-    /// Connects to a target server through a SOCKS5 proxy using given username
-    /// and password.
+    /// Connects to a target server through a SOCKS5 proxy using given username,
+    /// password and the address of the proxy.
     ///
     /// # Error
     ///
@@ -78,13 +82,99 @@ impl Socks5Stream {
         target: T,
         username: &'a str,
         password: &'a str,
-    ) -> Result<Self>
+    ) -> Result<Socks5Stream<TcpStream>>
     where
         P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
     {
         Self::execute_command(
             proxy,
+            target,
+            Authentication::Password { username, password },
+            Command::Connect,
+        )
+        .await
+    }
+
+    #[cfg(feature = "tor")]
+    /// Resolve the domain name to an ip using special Tor Resolve command, by
+    /// connecting to a Tor compatible proxy given it's address.
+    pub async fn tor_resolve<'t, P, T>(proxy: P, target: T) -> Result<TargetAddr<'static>>
+    where
+        P: ToProxyAddrs,
+        T: IntoTargetAddr<'t>,
+    {
+        let sock = Self::execute_command(proxy, target, Authentication::None, Command::TorResolve).await?;
+
+        Ok(sock.target_addr().to_owned())
+    }
+
+    #[cfg(feature = "tor")]
+    /// Perform a reverse DNS query on the given ip using special Tor Resolve
+    /// PTR command, by connecting to a Tor compatible proxy given it's
+    /// address.
+    pub async fn tor_resolve_ptr<'t, P, T>(proxy: P, target: T) -> Result<TargetAddr<'static>>
+    where
+        P: ToProxyAddrs,
+        T: IntoTargetAddr<'t>,
+    {
+        let sock = Self::execute_command(proxy, target, Authentication::None, Command::TorResolvePtr).await?;
+
+        Ok(sock.target_addr().to_owned())
+    }
+
+    async fn execute_command<'a, 't, P, T>(
+        proxy: P,
+        target: T,
+        auth: Authentication<'a>,
+        command: Command,
+    ) -> Result<Socks5Stream<TcpStream>>
+    where
+        P: ToProxyAddrs,
+        T: IntoTargetAddr<'t>,
+    {
+        Self::validate_auth(&auth)?;
+
+        let sock = SocksConnector::new(auth, command, proxy.to_proxy_addrs().fuse(), target.into_target_addr()?)
+            .execute()
+            .await?;
+
+        Ok(sock)
+    }
+}
+
+impl<S> Socks5Stream<S>
+where S: AsyncRead + AsyncWrite + Unpin
+{
+    /// Connects to a target server through a SOCKS5 proxy given a socket to it.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to
+    /// `TargetAddr`.
+    pub async fn connect_with_socket<'t, T>(socket: S, target: T) -> Result<Socks5Stream<S>>
+    where T: IntoTargetAddr<'t> {
+        Self::execute_command_with_socket(socket, target, Authentication::None, Command::Connect).await
+    }
+
+    /// Connects to a target server through a SOCKS5 proxy using given username,
+    /// password and a socket to the proxy
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to
+    /// `TargetAddr`.
+    pub async fn connect_with_password_and_socket<'a, 't, T>(
+        socket: S,
+        target: T,
+        username: &'a str,
+        password: &'a str,
+    ) -> Result<Socks5Stream<S>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        Self::execute_command_with_socket(
+            socket,
             target,
             Authentication::Password { username, password },
             Command::Connect,
@@ -103,56 +193,55 @@ impl Socks5Stream {
                 if password_len < 1 || password_len > 255 {
                     Err(Error::InvalidAuthValues("password length should between 1 to 255"))?
                 }
-            }
-            Authentication::None => {}
+            },
+            Authentication::None => {},
         }
         Ok(())
     }
 
     #[cfg(feature = "tor")]
-    pub async fn tor_resolve<'t, P, T>(proxy: P, target: T) -> Result<TargetAddr<'static>>
-    where
-        P: ToProxyAddrs,
-        T: IntoTargetAddr<'t>,
-    {
-        let sock = Self::execute_command(proxy, target, Authentication::None, Command::TorResolve).await?;
+    /// Resolve the domain name to an ip using special Tor Resolve command, by
+    /// connecting to a Tor compatible proxy given a socket to it.
+    pub async fn tor_resolve_with_socket<'t, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
+    where T: IntoTargetAddr<'t> {
+        let sock = Self::execute_command_with_socket(socket, target, Authentication::None, Command::TorResolve).await?;
 
         Ok(sock.target_addr().to_owned())
     }
 
     #[cfg(feature = "tor")]
-    pub async fn tor_resolve_ptr<'t, P, T>(proxy: P, target: T) -> Result<TargetAddr<'static>>
-    where
-        P: ToProxyAddrs,
-        T: IntoTargetAddr<'t>,
-    {
-        let sock = Self::execute_command(proxy, target, Authentication::None, Command::TorResolvePtr).await?;
+    /// Perform a reverse DNS query on the given ip using special Tor Resolve
+    /// PTR command, by connecting to a Tor compatible proxy given a socket
+    /// to it.
+    pub async fn tor_resolve_ptr_with_socket<'t, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
+    where T: IntoTargetAddr<'t> {
+        let sock =
+            Self::execute_command_with_socket(socket, target, Authentication::None, Command::TorResolvePtr).await?;
 
         Ok(sock.target_addr().to_owned())
     }
 
-    async fn execute_command<'a, 't, P, T>(
-        proxy: P,
+    async fn execute_command_with_socket<'a, 't, T>(
+        socket: S,
         target: T,
         auth: Authentication<'a>,
         command: Command,
-    ) -> Result<Socks5Stream>
+    ) -> Result<Socks5Stream<S>>
     where
-        P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
     {
         Self::validate_auth(&auth)?;
 
-        let sock = SocksConnector::new(auth, command, proxy.to_proxy_addrs().fuse(), target.into_target_addr()?)
-            .execute()
+        let sock = SocksConnector::new(auth, command, stream::empty().fuse(), target.into_target_addr()?)
+            .execute_with_socket(socket)
             .await?;
 
         Ok(sock)
     }
 
-    /// Consumes the `Socks5Stream`, returning the inner `tokio_tcp::TcpStream`.
-    pub fn into_inner(self) -> TcpStream {
-        self.tcp
+    /// Consumes the `Socks5Stream`, returning the inner socket.
+    pub fn into_inner(self) -> S {
+        self.socket
     }
 
     /// Returns the target address that the proxy server connects to.
@@ -162,7 +251,7 @@ impl Socks5Stream {
             TargetAddr::Domain(domain, port) => {
                 let domain: &str = domain.borrow();
                 TargetAddr::Domain(domain.into(), *port)
-            }
+            },
         }
     }
 }
@@ -179,8 +268,7 @@ pub struct SocksConnector<'a, 't, S> {
 }
 
 impl<'a, 't, S> SocksConnector<'a, 't, S>
-where
-    S: Stream<Item = Result<SocketAddr>> + Unpin,
+where S: Stream<Item = Result<SocketAddr>> + Unpin
 {
     fn new(auth: Authentication<'a>, command: Command, proxy: Fuse<S>, target: TargetAddr<'t>) -> Self {
         SocksConnector {
@@ -195,21 +283,29 @@ where
     }
 
     /// Connect to the proxy server, authenticate and issue the SOCKS command
-    pub async fn execute(&mut self) -> Result<Socks5Stream> {
+    pub async fn execute(&mut self) -> Result<Socks5Stream<TcpStream>> {
         let next_addr = self.proxy.select_next_some().await?;
-        let mut tcp = TcpStream::connect(next_addr)
+        let tcp = TcpStream::connect(next_addr)
             .await
             .map_err(|_| Error::ProxyServerUnreachable)?;
 
-        self.authenticate(&mut tcp).await?;
+        self.execute_with_socket(tcp).await
+    }
+
+    pub async fn execute_with_socket<T: AsyncRead + AsyncWrite + Unpin>(
+        &mut self,
+        mut socket: T,
+    ) -> Result<Socks5Stream<T>>
+    {
+        self.authenticate(&mut socket).await?;
 
         // Send request address that should be proxied
         self.prepare_send_request();
-        tcp.write_all(&self.buf[self.ptr..self.len]).await?;
+        socket.write_all(&self.buf[self.ptr..self.len]).await?;
 
-        let target = self.receive_reply(&mut tcp).await?;
+        let target = self.receive_reply(&mut socket).await?;
 
-        Ok(Socks5Stream { tcp, target })
+        Ok(Socks5Stream { socket, target })
     }
 
     fn prepare_send_method_selection(&mut self) {
@@ -219,11 +315,11 @@ where
             Authentication::None => {
                 self.buf[1..3].copy_from_slice(&[1, 0x00]);
                 self.len = 3;
-            }
+            },
             Authentication::Password { .. } => {
                 self.buf[1..4].copy_from_slice(&[2, 0x00, 0x02]);
                 self.len = 4;
-            }
+            },
         }
     }
 
@@ -264,13 +360,13 @@ where
                 self.buf[4..8].copy_from_slice(&addr.ip().octets());
                 self.buf[8..10].copy_from_slice(&addr.port().to_be_bytes());
                 self.len = 10;
-            }
+            },
             TargetAddr::Ip(SocketAddr::V6(addr)) => {
                 self.buf[3] = 0x04;
                 self.buf[4..20].copy_from_slice(&addr.ip().octets());
                 self.buf[20..22].copy_from_slice(&addr.port().to_be_bytes());
                 self.len = 22;
-            }
+            },
             TargetAddr::Domain(domain, port) => {
                 self.buf[3] = 0x03;
                 let domain = domain.as_bytes();
@@ -279,7 +375,7 @@ where
                 self.buf[5..5 + len].copy_from_slice(domain);
                 self.buf[(5 + len)..(7 + len)].copy_from_slice(&port.to_be_bytes());
                 self.len = 7 + len;
-            }
+            },
         }
     }
 
@@ -288,7 +384,7 @@ where
         self.len = 4;
     }
 
-    async fn password_authentication_protocol(&mut self, tcp: &mut TcpStream) -> Result<()> {
+    async fn password_authentication_protocol<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
         self.prepare_send_password_auth();
         tcp.write_all(&self.buf[self.ptr..self.len]).await?;
 
@@ -305,7 +401,7 @@ where
         Ok(())
     }
 
-    async fn authenticate(&mut self, tcp: &mut TcpStream) -> Result<()> {
+    async fn authenticate<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
         // Write request to connect/authenticate
         self.prepare_send_method_selection();
         tcp.write_all(&self.buf[self.ptr..self.len]).await?;
@@ -319,13 +415,13 @@ where
         match self.buf[1] {
             0x00 => {
                 // No auth
-            }
+            },
             0x02 => {
                 self.password_authentication_protocol(tcp).await?;
-            }
+            },
             0xff => {
                 return Err(Error::NoAcceptableAuthMethods);
-            }
+            },
             m if m != self.auth.id() => return Err(Error::UnknownAuthMethod),
             _ => unimplemented!(),
         }
@@ -333,7 +429,7 @@ where
         Ok(())
     }
 
-    async fn receive_reply(&mut self, tcp: &mut TcpStream) -> Result<TargetAddr<'static>> {
+    async fn receive_reply<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<TargetAddr<'static>> {
         self.prepare_recv_reply();
         self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
         if self.buf[0] != 0x05 {
@@ -344,7 +440,7 @@ where
         }
 
         match self.buf[1] {
-            0x00 => {} // succeeded
+            0x00 => {}, // succeeded
             0x01 => Err(Error::GeneralSocksServerFailure)?,
             0x02 => Err(Error::ConnectionNotAllowedByRuleset)?,
             0x03 => Err(Error::NetworkUnreachable)?,
@@ -360,17 +456,17 @@ where
             // IPv4
             0x01 => {
                 self.len = 10;
-            }
+            },
             // IPv6
             0x04 => {
                 self.len = 22;
-            }
+            },
             // Domain
             0x03 => {
                 self.len = 5;
                 self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
                 self.len += self.buf[4] as usize + 2;
-            }
+            },
             _ => Err(Error::UnknownAddressType)?,
         }
 
@@ -383,7 +479,7 @@ where
                 let ip = Ipv4Addr::from(ip);
                 let port = u16::from_be_bytes([self.buf[8], self.buf[9]]);
                 (ip, port).into_target_addr()?
-            }
+            },
             // IPv6
             0x04 => {
                 let mut ip = [0; 16];
@@ -391,7 +487,7 @@ where
                 let ip = Ipv6Addr::from(ip);
                 let port = u16::from_be_bytes([self.buf[20], self.buf[21]]);
                 (ip, port).into_target_addr()?
-            }
+            },
             // Domain
             0x03 => {
                 let domain_bytes = (&self.buf[5..(self.len - 2)]).to_vec();
@@ -399,7 +495,7 @@ where
                     .map_err(|_| Error::InvalidTargetAddress("not a valid UTF-8 string"))?;
                 let port = u16::from_be_bytes([self.buf[self.len - 2], self.buf[self.len - 1]]);
                 TargetAddr::Domain(domain.into(), port)
-            }
+            },
             _ => unreachable!(),
         };
 
@@ -413,11 +509,11 @@ where
 /// `bind_addr` to the remote process via the primary connection. Then, call the
 /// `accept` function and wait for the other end connecting to the rendezvous
 /// address.
-pub struct Socks5Listener {
-    inner: Socks5Stream,
+pub struct Socks5Listener<S> {
+    inner: Socks5Stream<S>,
 }
 
-impl Socks5Listener {
+impl Socks5Listener<TcpStream> {
     /// Initiates a BIND request to the specified proxy.
     ///
     /// The proxy will filter incoming connections based on the value of
@@ -427,7 +523,7 @@ impl Socks5Listener {
     ///
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
-    pub async fn bind<'t, P, T>(proxy: P, target: T) -> Result<Socks5Listener>
+    pub async fn bind<'t, P, T>(proxy: P, target: T) -> Result<Socks5Listener<TcpStream>>
     where
         P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
@@ -450,7 +546,7 @@ impl Socks5Listener {
         target: T,
         username: &'a str,
         password: &'a str,
-    ) -> Result<Socks5Listener>
+    ) -> Result<Socks5Listener<TcpStream>>
     where
         P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
@@ -458,7 +554,11 @@ impl Socks5Listener {
         Self::bind_with_auth(Authentication::Password { username, password }, proxy, target).await
     }
 
-    async fn bind_with_auth<'t, P, T>(auth: Authentication<'_>, proxy: P, target: T) -> Result<Socks5Listener>
+    async fn bind_with_auth<'t, P, T>(
+        auth: Authentication<'_>,
+        proxy: P,
+        target: T,
+    ) -> Result<Socks5Listener<TcpStream>>
     where
         P: ToProxyAddrs,
         T: IntoTargetAddr<'t>,
@@ -471,6 +571,62 @@ impl Socks5Listener {
         )
         .execute()
         .await?;
+
+        Ok(Socks5Listener { inner: socket })
+    }
+}
+
+impl<S> Socks5Listener<S>
+where S: AsyncRead + AsyncWrite + Unpin
+{
+    /// Initiates a BIND request to the specified proxy using the given socket
+    /// to it.
+    ///
+    /// The proxy will filter incoming connections based on the value of
+    /// `target`.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to
+    /// `TargetAddr`.
+    pub async fn bind_with_socket<'t, T>(socket: S, target: T) -> Result<Socks5Listener<S>>
+    where T: IntoTargetAddr<'t> {
+        Self::bind_with_auth_and_socket(Authentication::None, socket, target).await
+    }
+
+    /// Initiates a BIND request to the specified proxy using given username,
+    /// password and socket to the proxy.
+    ///
+    /// The proxy will filter incoming connections based on the value of
+    /// `target`.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to
+    /// `TargetAddr`.
+    pub async fn bind_with_password_and_socket<'a, 't, T>(
+        socket: S,
+        target: T,
+        username: &'a str,
+        password: &'a str,
+    ) -> Result<Socks5Listener<S>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        Self::bind_with_auth_and_socket(Authentication::Password { username, password }, socket, target).await
+    }
+
+    async fn bind_with_auth_and_socket<'t, T>(
+        auth: Authentication<'_>,
+        socket: S,
+        target: T,
+    ) -> Result<Socks5Listener<S>>
+    where
+        T: IntoTargetAddr<'t>,
+    {
+        let socket = SocksConnector::new(auth, Command::Bind, stream::empty().fuse(), target.into_target_addr()?)
+            .execute_with_socket(socket)
+            .await?;
 
         Ok(Socks5Listener { inner: socket })
     }
@@ -488,7 +644,7 @@ impl Socks5Listener {
     ///
     /// The value of `bind_addr` should be forwarded to the remote process
     /// before this method is called.
-    pub async fn accept(mut self) -> Result<Socks5Stream> {
+    pub async fn accept(mut self) -> Result<Socks5Stream<S>> {
         let mut connector = SocksConnector {
             auth: Authentication::None,
             command: Command::Bind,
@@ -499,35 +655,39 @@ impl Socks5Listener {
             len: 0,
         };
 
-        let target = connector.receive_reply(&mut self.inner.tcp).await?;
+        let target = connector.receive_reply(&mut self.inner.socket).await?;
 
         Ok(Socks5Stream {
-            tcp: self.inner.tcp,
+            socket: self.inner.socket,
             target,
         })
     }
 }
 
-impl AsyncRead for Socks5Stream {
+impl<T> AsyncRead for Socks5Stream<T>
+where T: AsyncRead + Unpin
+{
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [std::mem::MaybeUninit<u8>]) -> bool {
-        AsyncRead::prepare_uninitialized_buffer(&self.tcp, buf)
+        AsyncRead::prepare_uninitialized_buffer(&self.socket, buf)
     }
 
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        AsyncRead::poll_read(Pin::new(&mut self.tcp), cx, buf)
+        AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
     }
 }
 
-impl AsyncWrite for Socks5Stream {
+impl<T> AsyncWrite for Socks5Stream<T>
+where T: AsyncWrite + Unpin
+{
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write(Pin::new(&mut self.tcp), cx, buf)
+        AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_flush(Pin::new(&mut self.tcp), cx)
+        AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_shutdown(Pin::new(&mut self.tcp), cx)
+        AsyncWrite::poll_shutdown(Pin::new(&mut self.socket), cx)
     }
 }

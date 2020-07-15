@@ -23,7 +23,7 @@ jobs:
         run: |
           sudo add-apt-repository ppa:artyom.h31/3proxy -y
           sudo apt-get update
-          sudo apt-get install 3proxy -y
+          sudo apt-get install 3proxy socat -y
       - name: Run tests
         run: |
           cargo build --verbose --all
