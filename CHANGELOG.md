@@ -1,3 +1,7 @@
+# 0.3.0
+
+* Allow to take arbitrary socket instead of address to establish connections to proxy (#20)
+
 # 0.2.2
 
 * Replace failure with thiserror (#17)
