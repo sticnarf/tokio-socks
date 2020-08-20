@@ -14,7 +14,7 @@ Asynchronous SOCKS proxy support for Rust.
 - [x] Username/password authentication
 - [ ] GSSAPI authentication
 - [ ] Asynchronous DNS resolution
-- [ ] Chain proxies
+- [X] Chain proxies
 - [ ] SOCKS4
 
 ## License
