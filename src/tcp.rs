@@ -385,6 +385,10 @@ where S: Stream<Item = Result<SocketAddr>> + Unpin
     }
 
     async fn password_authentication_protocol<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
+        if let Authentication::None = self.auth {
+            return Err(Error::AuthorizationRequired);
+        }
+
         self.prepare_send_password_auth();
         tcp.write_all(&self.buf[self.ptr..self.len]).await?;
 
