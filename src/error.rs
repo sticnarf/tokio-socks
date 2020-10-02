@@ -62,6 +62,9 @@ pub enum Error {
     /// Password auth failure
     #[error("Password auth failure, code: {0}")]
     PasswordAuthFailure(u8),
+
+    #[error("Authorization required")]
+    AuthorizationRequired,
 }
 
 ///// Result type of `tokio-socks`
