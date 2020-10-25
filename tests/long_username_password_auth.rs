@@ -8,7 +8,7 @@ use tokio_socks::{
 
 #[test]
 fn connect_long_username_password() -> Result<()> {
-    let mut runtime = runtime().lock().unwrap();
+    let runtime = runtime().lock().unwrap();
     let conn = runtime.block_on(Socks5Stream::connect_with_password(
         PROXY_ADDR, ECHO_SERVER_ADDR, "mylonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglogin",
                                                                     "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglongpassword"))?;
@@ -18,7 +18,7 @@ fn connect_long_username_password() -> Result<()> {
 #[test]
 fn bind_long_username_password() -> Result<()> {
     let bind = {
-        let mut runtime = runtime().lock().unwrap();
+        let runtime = runtime().lock().unwrap();
         runtime.block_on(Socks5Listener::bind_with_password(
             PROXY_ADDR,
             ECHO_SERVER_ADDR,
@@ -31,7 +31,7 @@ fn bind_long_username_password() -> Result<()> {
 
 #[test]
 fn connect_with_socket_long_username_password() -> Result<()> {
-    let mut runtime = runtime().lock().unwrap();
+    let runtime = runtime().lock().unwrap();
     let socket = runtime.block_on(connect_unix())?;
     let conn = runtime.block_on(Socks5Stream::connect_with_password_and_socket(
         socket, ECHO_SERVER_ADDR, "mylonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglogin",
@@ -42,7 +42,7 @@ fn connect_with_socket_long_username_password() -> Result<()> {
 #[test]
 fn bind_with_socket_long_username_password() -> Result<()> {
     let bind = {
-        let mut runtime = runtime().lock().unwrap();
+        let runtime = runtime().lock().unwrap();
         let socket = runtime.block_on(connect_unix())?;
         runtime.block_on(Socks5Listener::bind_with_password_and_socket(
             socket,
