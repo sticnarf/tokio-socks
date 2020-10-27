@@ -1,4 +1,3 @@
-use futures::{future, StreamExt};
 use once_cell::sync::OnceCell;
 use std::{
     io::{Read, Write},
@@ -22,21 +21,14 @@ pub const ECHO_SERVER_ADDR: &'static str = "localhost:10007";
 pub const MSG: &[u8] = b"hello";
 
 pub async fn echo_server() -> Result<()> {
-    let mut listener = TcpListener::bind(&SocketAddr::from(([0, 0, 0, 0], 10007))).await?;
-    listener
-        .incoming()
-        .for_each(|tcp_stream| {
-            if let Ok(mut stream) = tcp_stream {
-                tokio::spawn(async move {
-                    let (mut reader, mut writer) = stream.split();
-                    copy(&mut reader, &mut writer).await.unwrap();
-                });
-            }
-
-            future::ready(())
-        })
-        .await;
-    Ok(())
+    let listener = TcpListener::bind(&SocketAddr::from(([0, 0, 0, 0], 10007))).await?;
+    loop {
+        let (mut stream, _) = listener.accept().await?;
+        tokio::spawn(async move {
+            let (mut reader, mut writer) = stream.split();
+            copy(&mut reader, &mut writer).await.unwrap();
+        });
+    }
 }
 
 pub async fn reply_response<S: AsyncRead + AsyncWrite + Unpin>(mut socket: Socks5Stream<S>) -> Result<[u8; 5]> {

@@ -14,7 +14,7 @@ use std::{
     pin::Pin,
 };
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::TcpStream,
 };
 
@@ -671,11 +671,7 @@ where S: AsyncRead + AsyncWrite + Unpin
 impl<T> AsyncRead for Socks5Stream<T>
 where T: AsyncRead + Unpin
 {
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [std::mem::MaybeUninit<u8>]) -> bool {
-        AsyncRead::prepare_uninitialized_buffer(&self.socket, buf)
-    }
-
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
     }
 }

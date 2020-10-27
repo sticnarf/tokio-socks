@@ -9,7 +9,7 @@ use tokio_socks::{
 
 #[test]
 fn connect_no_auth() -> Result<()> {
-    let mut runtime = runtime().lock().unwrap();
+    let runtime = runtime().lock().unwrap();
     let conn = runtime.block_on(Socks5Stream::connect(PROXY_ADDR, ECHO_SERVER_ADDR))?;
     runtime.block_on(test_connect(conn))
 }
@@ -17,7 +17,7 @@ fn connect_no_auth() -> Result<()> {
 #[test]
 fn bind_no_auth() -> Result<()> {
     let bind = {
-        let mut runtime = runtime().lock().unwrap();
+        let runtime = runtime().lock().unwrap();
         runtime.block_on(Socks5Listener::bind(PROXY_ADDR, ECHO_SERVER_ADDR))
     }?;
     test_bind(bind)
@@ -25,7 +25,7 @@ fn bind_no_auth() -> Result<()> {
 
 #[test]
 fn connect_with_socket_no_auth() -> Result<()> {
-    let mut runtime = runtime().lock().unwrap();
+    let runtime = runtime().lock().unwrap();
     let socket = runtime.block_on(connect_unix())?;
     let conn = runtime.block_on(Socks5Stream::connect_with_socket(socket, ECHO_SERVER_ADDR))?;
     runtime.block_on(test_connect(conn))
@@ -34,7 +34,7 @@ fn connect_with_socket_no_auth() -> Result<()> {
 #[test]
 fn bind_with_socket_no_auth() -> Result<()> {
     let bind = {
-        let mut runtime = runtime().lock().unwrap();
+        let runtime = runtime().lock().unwrap();
         let socket = runtime.block_on(connect_unix())?;
         runtime.block_on(Socks5Listener::bind_with_socket(socket, ECHO_SERVER_ADDR))
     }?;
