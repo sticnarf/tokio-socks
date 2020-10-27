@@ -1,3 +1,9 @@
+# 0.4.0
+
+* Return error if authorization is required but credentials are not present (#24)
+
+* Upgrade tokio to 0.3 (#27)
+
 # 0.3.0
 
 * Allow to take arbitrary socket instead of address to establish connections to proxy (#20)
