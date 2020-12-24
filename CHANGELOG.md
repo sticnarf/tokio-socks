@@ -1,3 +1,7 @@
+# 0.5.0
+
+* Upgrade tokio to 1.0 (#28)
+
 # 0.4.0
 
 * Return error if authorization is required but credentials are not present (#24)
