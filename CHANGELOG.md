@@ -1,3 +1,7 @@
+# 0.5.1
+
+* Reduce dependencies on `futures` crate (#30)
+
 # 0.5.0
 
 * Upgrade tokio to 1.0 (#28)
