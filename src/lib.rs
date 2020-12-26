@@ -1,14 +1,14 @@
 use either::Either;
-use futures::{
+use futures_util::{
     future,
     stream::{self, Once, Stream},
-    task::{Context, Poll},
 };
 use std::{
     borrow::Cow,
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     pin::Pin,
+    task::{Context, Poll},
     vec,
 };
 
@@ -264,7 +264,8 @@ pub mod tcp;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::{executor::block_on, StreamExt};
+    use futures_executor::block_on;
+    use futures_util::StreamExt;
 
     fn to_proxy_addrs<T: ToProxyAddrs>(t: T) -> Result<Vec<SocketAddr>> {
         Ok(block_on(t.to_proxy_addrs().map(Result::unwrap).collect()))
