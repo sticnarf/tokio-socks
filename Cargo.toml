@@ -19,6 +19,10 @@ travis-ci = { repository = "sticnarf/tokio-socks" }
 tor = []
 
 [[example]]
+name = "socket"
+required-features = ["tor"]
+
+[[example]]
 name = "tor"
 required-features = ["tor"]
 
