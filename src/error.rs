@@ -62,6 +62,9 @@ pub enum Error {
     /// Password auth failure
     #[error("Password auth failure, code: {0}")]
     PasswordAuthFailure(u8),
+    /// Auth with identd failed
+    #[error("Ident auth failure")]
+    IdentAuthFailure,
 
     #[error("Authorization required")]
     AuthorizationRequired,
