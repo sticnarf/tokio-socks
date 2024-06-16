@@ -1,3 +1,7 @@
+# 0.5.2
+
+* Added SOCKS4 support `bind` and `connect`.
+
 # 0.5.1
 
 * Reduce dependencies on `futures` crate (#30)
