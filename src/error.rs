@@ -65,6 +65,12 @@ pub enum Error {
 
     #[error("Authorization required")]
     AuthorizationRequired,
+
+    #[error("Request rejected because SOCKS server cannot connect to identd on the client")]
+    IdentdAuthFailure,
+
+    #[error("Request rejected because the client program and identd report different user-ids")]
+    InvalidUserIdAuthFailure,
 }
 
 ///// Result type of `tokio-socks`
