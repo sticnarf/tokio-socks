@@ -2,7 +2,6 @@ use once_cell::sync::OnceCell;
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream as StdTcpStream},
-    ops::{Deref, DerefMut},
     sync::Mutex,
 };
 use tokio::{
@@ -10,11 +9,7 @@ use tokio::{
     net::{TcpListener, UnixStream},
     runtime::Runtime,
 };
-use tokio_socks::{
-    tcp::{Socks5Listener, Socks5Stream},
-    tcp_socks4::{Socks4Listener, Socks4Stream},
-    Error, Result,
-};
+use tokio_socks::{tcp::socks4::Socks4Listener, tcp::socks5::Socks5Listener, Error, Result};
 
 pub const UNIX_PROXY_ADDR: &'static str = "/tmp/proxy.s";
 pub const PROXY_ADDR: &'static str = "127.0.0.1:41080";

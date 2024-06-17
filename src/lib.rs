@@ -261,7 +261,6 @@ impl<'a> Authentication<'a> {
 
 mod error;
 pub mod tcp;
-pub mod tcp_socks4;
 
 #[cfg(test)]
 mod tests {
