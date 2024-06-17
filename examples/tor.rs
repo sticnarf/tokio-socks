@@ -6,7 +6,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     runtime::Runtime,
 };
-use tokio_socks::{tcp::Socks5Stream, Error};
+use tokio_socks::{tcp::socks5::Socks5Stream, Error};
 
 const PROXY_ADDR: &str = "127.0.0.1:9050";
 const ONION_ADDR: &str = "3g2upl4pq6kufc4m.onion:80"; // DuckDuckGo
