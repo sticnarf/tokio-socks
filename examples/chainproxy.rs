@@ -7,7 +7,7 @@ use tokio::{
     net::TcpStream,
     runtime::Runtime,
 };
-use tokio_socks::{tcp::Socks5Stream, Error};
+use tokio_socks::{tcp::socks5::Socks5Stream, Error};
 
 const PROXY_ADDR: [&str; 2] = ["184.176.166.20:4145", "90.89.205.248:1080"]; // public proxies found here : http://spys.one/en/socks-proxy-list/
 const DEST_ADDR: &str = "duckduckgo.com:80";
