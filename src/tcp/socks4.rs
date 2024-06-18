@@ -59,7 +59,7 @@ impl Socks4Stream<TcpStream> {
         Self::execute_command(proxy, target, None, CommandV4::Connect).await
     }
 
-    /// Connects to a target server through a SOCKS5 proxy using given username,
+    /// Connects to a target server through a SOCKS4 proxy using given username,
     /// password and the address of the proxy.
     ///
     /// # Error
@@ -107,7 +107,7 @@ impl<S> Socks4Stream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    /// Connects to a target server through a SOCKS5 proxy given a socket to it.
+    /// Connects to a target server through a SOCKS4 proxy given a socket to it.
     ///
     /// # Error
     ///
@@ -120,7 +120,7 @@ where
         Self::execute_command_with_socket(socket, target, None, CommandV4::Connect).await
     }
 
-    /// Connects to a target server through a SOCKS5 proxy using given username,
+    /// Connects to a target server through a SOCKS4 proxy using given username,
     /// password and a socket to the proxy
     ///
     /// # Error
@@ -325,7 +325,7 @@ where
     }
 }
 
-/// A SOCKS5 BIND client.
+/// A SOCKS4 BIND client.
 ///
 /// Once you get an instance of `Socks4Listener`, you should send the
 /// `bind_addr` to the remote process via the primary connection. Then, call the
