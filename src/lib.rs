@@ -235,7 +235,8 @@ impl IntoTargetAddr<'static> for (String, u16) {
 }
 
 impl<'a, T> IntoTargetAddr<'a> for &'a T
-where T: IntoTargetAddr<'a> + Copy
+where
+    T: IntoTargetAddr<'a> + Copy,
 {
     fn into_target_addr(self) -> Result<TargetAddr<'a>> {
         (*self).into_target_addr()
@@ -299,7 +300,9 @@ mod tests {
     }
 
     fn into_target_addr<'a, T>(t: T) -> Result<TargetAddr<'a>>
-    where T: IntoTargetAddr<'a> {
+    where
+        T: IntoTargetAddr<'a>,
+    {
         t.into_target_addr()
     }
 

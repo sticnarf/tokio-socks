@@ -1,8 +1,8 @@
 mod common;
 
-use common::{connect_unix, runtime, test_bind, test_connect, ECHO_SERVER_ADDR, PROXY_ADDR};
+use common::{connect_unix, runtime, test_bind, test_connect, ECHO_SERVER_ADDR, PROXY_ADDR, UNIX_PROXY_ADDR};
 use tokio_socks::{
-    tcp::{Socks5Listener, Socks5Stream},
+    tcp::socks5::{Socks5Listener, Socks5Stream},
     Result,
 };
 
@@ -32,7 +32,7 @@ fn bind_long_username_password() -> Result<()> {
 #[test]
 fn connect_with_socket_long_username_password() -> Result<()> {
     let runtime = runtime().lock().unwrap();
-    let socket = runtime.block_on(connect_unix())?;
+    let socket = runtime.block_on(connect_unix(UNIX_PROXY_ADDR))?;
     let conn = runtime.block_on(Socks5Stream::connect_with_password_and_socket(
         socket, ECHO_SERVER_ADDR, "mylonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglogin",
                                                                     "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglongpassword"))?;
@@ -43,7 +43,7 @@ fn connect_with_socket_long_username_password() -> Result<()> {
 fn bind_with_socket_long_username_password() -> Result<()> {
     let bind = {
         let runtime = runtime().lock().unwrap();
-        let socket = runtime.block_on(connect_unix())?;
+        let socket = runtime.block_on(connect_unix(UNIX_PROXY_ADDR))?;
         runtime.block_on(Socks5Listener::bind_with_password_and_socket(
             socket,
             ECHO_SERVER_ADDR,

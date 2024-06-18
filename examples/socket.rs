@@ -7,7 +7,7 @@ use tokio::{
     net::{TcpStream, UnixStream},
     runtime::Runtime,
 };
-use tokio_socks::{tcp::Socks5Stream, Error};
+use tokio_socks::{tcp::socks5::Socks5Stream, Error};
 
 const UNIX_PROXY_ADDR: &str = "/tmp/tor/socket.s";
 const TCP_PROXY_ADDR: &str = "127.0.0.1:9050";

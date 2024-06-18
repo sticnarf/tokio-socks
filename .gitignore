@@ -30,3 +30,6 @@ out/
 
 # Vscode files
 .vscode/**
+
+docker-compose.yml
+Dockerfile
