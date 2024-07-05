@@ -1,12 +1,7 @@
-use crate::{Authentication, Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
+use crate::{Authentication, Error, GssapiAuthenticator, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
 use futures_util::stream::{self, Fuse, Stream, StreamExt};
 use std::{
-    borrow::Borrow,
-    io,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    ops::{Deref, DerefMut},
-    pin::Pin,
-    task::{Context, Poll},
+    borrow::Borrow, io, net::{Ipv4Addr, Ipv6Addr, SocketAddr}, ops::{Deref, DerefMut}, pin::Pin, task::{Context, Poll}
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
@@ -63,6 +58,30 @@ impl Socks5Stream<TcpStream> {
         T: IntoTargetAddr<'t>,
     {
         Self::execute_command(proxy, target, Authentication::None, Command::Connect).await
+    }
+
+    /// Connects to a target server through a SOCKS5 proxy given the proxy
+    /// address and authenticates via gssapi.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to
+    /// `TargetAddr`.
+    pub async fn connect_with_gssapi<'a, 't, P, T>(
+        proxy: P, 
+        target: T,
+        gssapi_authenticator: GssapiAuthenticator<'a>,
+    ) -> Result<Socks5Stream<TcpStream>>
+    where
+        P: ToProxyAddrs,
+        T: IntoTargetAddr<'t>,
+    {
+        Self::execute_command(
+            proxy, 
+            target, 
+            Authentication::Gssapi { gssapi_authenticator  }, 
+            Command::Connect
+        ).await
     }
 
     /// Connects to a target server through a SOCKS5 proxy using given username,
@@ -139,8 +158,7 @@ impl Socks5Stream<TcpStream> {
 }
 
 impl<S> Socks5Stream<S>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
+where S: AsyncRead + AsyncWrite + Unpin
 {
     /// Connects to a target server through a SOCKS5 proxy given a socket to it.
     ///
@@ -149,11 +167,33 @@ where
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
     pub async fn connect_with_socket<'t, T>(socket: S, target: T) -> Result<Socks5Stream<S>>
+    where T: IntoTargetAddr<'t> {
+        Self::execute_command_with_socket(socket, target, Authentication::None, Command::Connect).await
+    }
+
+    /// Connects to a target server through a SOCKS5 proxy given the proxy
+    /// address and authenticates via gssapi.
+    ///
+    /// # Error
+    ///
+    /// It propagates the error that occurs in the conversion from `T` to
+    /// `TargetAddr`.
+    pub async fn connect_with_gssapi_and_socket<'a, 't, T>(
+        socket: S,
+        target: T,
+        gssapi_authenticator: GssapiAuthenticator<'a>,
+    ) -> Result<Socks5Stream<S>>
     where
         T: IntoTargetAddr<'t>,
     {
-        Self::execute_command_with_socket(socket, target, Authentication::None, Command::Connect).await
+        Self::execute_command_with_socket(
+            socket, 
+            target, 
+            Authentication::Gssapi { gssapi_authenticator }, 
+            Command::Connect
+        ).await
     }
+
 
     /// Connects to a target server through a SOCKS5 proxy using given username,
     /// password and a socket to the proxy
@@ -180,19 +220,20 @@ where
         .await
     }
 
-    fn validate_auth<'a>(auth: &Authentication<'a>) -> Result<()> {
+    fn validate_auth(auth: &Authentication<'_>) -> Result<()> {
         match auth {
             Authentication::Password { username, password } => {
                 let username_len = username.as_bytes().len();
-                if username_len < 1 || username_len > 255 {
+                if !(1..=255).contains(&username_len) {
                     Err(Error::InvalidAuthValues("username length should between 1 to 255"))?
                 }
                 let password_len = password.as_bytes().len();
-                if password_len < 1 || password_len > 255 {
+                if !(1..=255).contains(&password_len) {
                     Err(Error::InvalidAuthValues("password length should between 1 to 255"))?
                 }
             },
             Authentication::None => {},
+            Authentication::Gssapi { .. } => {},
         }
         Ok(())
     }
@@ -201,9 +242,7 @@ where
     /// Resolve the domain name to an ip using special Tor Resolve command, by
     /// connecting to a Tor compatible proxy given a socket to it.
     pub async fn tor_resolve_with_socket<'t, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
-    where
-        T: IntoTargetAddr<'t>,
-    {
+    where T: IntoTargetAddr<'t> {
         let sock = Self::execute_command_with_socket(socket, target, Authentication::None, Command::TorResolve).await?;
 
         Ok(sock.target_addr().to_owned())
@@ -214,9 +253,7 @@ where
     /// PTR command, by connecting to a Tor compatible proxy given a socket
     /// to it.
     pub async fn tor_resolve_ptr_with_socket<'t, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
-    where
-        T: IntoTargetAddr<'t>,
-    {
+    where T: IntoTargetAddr<'t> {
         let sock =
             Self::execute_command_with_socket(socket, target, Authentication::None, Command::TorResolvePtr).await?;
 
@@ -270,8 +307,7 @@ pub struct SocksConnector<'a, 't, S> {
 }
 
 impl<'a, 't, S> SocksConnector<'a, 't, S>
-where
-    S: Stream<Item = Result<SocketAddr>> + Unpin,
+where S: Stream<Item = Result<SocketAddr>> + Unpin
 {
     fn new(auth: Authentication<'a>, command: Command, proxy: Fuse<S>, target: TargetAddr<'t>) -> Self {
         SocksConnector {
@@ -298,7 +334,8 @@ where
     pub async fn execute_with_socket<T: AsyncRead + AsyncWrite + Unpin>(
         &mut self,
         mut socket: T,
-    ) -> Result<Socks5Stream<T>> {
+    ) -> Result<Socks5Stream<T>>
+    {
         self.authenticate(&mut socket).await?;
 
         // Send request address that should be proxied
@@ -322,12 +359,100 @@ where
                 self.buf[1..4].copy_from_slice(&[2, 0x00, 0x02]);
                 self.len = 4;
             },
+            Authentication::Gssapi { .. } => {
+                self.buf[1..4].copy_from_slice(&[2, 0x00, 0x01]);
+                self.len = 4;
+            },
         }
     }
 
     fn prepare_recv_method_selection(&mut self) {
         self.ptr = 0;
         self.len = 2;
+    }
+
+    fn prepare_send_gssapi_subnego_token(&mut self) {
+        if let Authentication::Gssapi { gssapi_authenticator } = &self.auth {
+        /*
+            https://www.rfc-editor.org/rfc/rfc1961
+            
+            The security context protection level is sent from client to server
+            and vice versa using the following protected message format:
+
+            +------+------+------+.......................+
+            + ver  | mtyp | len  |   token               |
+            +------+------+------+.......................+
+            + 0x01 | 0x02 | 0x02 | up to 2^16 - 1 octets |
+            +------+------+------+.......................+
+
+            Where:
+                - "ver" is the protocol version number, here 1 to represent the first version of the SOCKS/GSS-API protocol
+
+                - "mtyp" is the message type, here 2 to represent a protection-level negotiation message
+
+                - "len" is the length of the "token" field in octets
+
+                - "token" is the GSS-API encapsulated protection level
+        */
+            
+            self.ptr = 0;
+            self.buf[0] = 0x01;  // ver
+            self.buf[1] = 0x02;  // mtyp
+            let snego_token = gssapi_authenticator.gssapi_authenticator.get_protextion_level();
+            let snego_token_bytes = snego_token.as_bytes();
+            let snego_token_len = snego_token_bytes.len();
+            self.buf[2] = snego_token_len as u8; // len
+            self.buf[3..(3 + snego_token_len)].copy_from_slice(snego_token_bytes);
+            self.len = 3 + snego_token_len;
+        
+        } else {
+            unreachable!()
+        }
+
+    }
+
+    fn prepare_send_gssapi_sec_context(&mut self, renegotiate_token: Option<&[u8]>) {
+        if let Authentication::Gssapi { gssapi_authenticator  } = &self.auth {
+        /*
+            https://www.rfc-editor.org/rfc/rfc1961
+
+            The client's GSS-API implementation then typically responds with the
+            resulting output_token which the client sends in a message to the
+            server.
+
+            +------+------+------+.......................+
+            + ver  | mtyp | len  |       token           |
+            +------+------+------+.......................+
+            + 0x01 | 0x01 | 0x02 | up to 2^16 - 1 octets |
+            +------+------+------+.......................+
+
+            Where:
+            
+            - "ver" is the protocol version number, here 1 to represent the
+                first version of the SOCKS/GSS-API protocol
+
+            - "mtyp" is the message type, here 1 to represent an
+                authentication message
+
+            - "len" is the length of the "token" field in octets
+
+            - "token" is the opaque authentication token emitted by GSS-API
+        */
+            
+            self.ptr = 0;
+            self.buf[0] = 0x01;  // ver
+            self.buf[1] = 0x01;  // mtyp
+            
+            let context_token =  gssapi_authenticator.gssapi_authenticator.get_security_context(renegotiate_token);                        
+            let context_token_bytes = context_token.as_bytes();
+            let context_token_len = context_token_bytes.len();
+            self.buf[2] = context_token_len as u8; // len
+            self.buf[3..(3 + context_token_len)].copy_from_slice(context_token_bytes);
+            self.len = 3 + context_token_len;
+        
+        } else {
+            unreachable!()
+        }
     }
 
     fn prepare_send_password_auth(&mut self) {
@@ -347,6 +472,12 @@ where
             unreachable!()
         }
     }
+
+    fn prepare_recv_gssapi_auth(&mut self, size: usize) {
+        self.ptr = 0;
+        self.len = size;
+    }
+
 
     fn prepare_recv_password_auth(&mut self) {
         self.ptr = 0;
@@ -384,6 +515,125 @@ where
     fn prepare_recv_reply(&mut self) {
         self.ptr = 0;
         self.len = 4;
+    }
+
+    async fn gssapi_authentication_protocol<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
+        // Implement Gssapi Auth Protocol.
+        // Error out if: Server selected gssapi but, we had None
+        if let Authentication::None = self.auth {
+            return Err(Error::AuthorizationRequired);
+        }
+        // Send sec_context token for first time with no renegotiation.
+        self.prepare_send_gssapi_sec_context(None);
+        tcp.write_all(&self.buf[self.ptr..self.len]).await?;
+
+        // Recieve and Validate server response 
+        self.prepare_recv_gssapi_auth(2);
+        tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+
+        if self.buf[1] == 0xff {
+        /*
+            If the server refuses the client's connection for any reason (GSS-API authentication failure or otherwise), it will return:
+                +------+------+
+                + ver  | mtyp |
+                +------+------+
+                + 0x01 | 0xff |
+                +------+------+
+
+            Where:
+
+            - "ver" is the protocol version number, here 1 to represent the
+            first version of the SOCKS/GSS-API protocol
+
+            - "mtyp" is the message type, here 0xff to represent an abort
+            message
+        */
+            return Err(Error::GssapiAuthFailure(self.buf[1]));
+        } else {
+            /*
+                In all continue/confirmation cases, the server uses the same message
+                type as for the client -> server interaction.
+
+                +------+------+------+.......................+
+                + ver  | mtyp | len  |       token           |
+                +------+------+------+.......................+
+                + 0x01 | 0x01 | 0x02 | up to 2^16 - 1 octets |
+                +------+------+------+.......................+            
+            */
+
+            // On sec_context validation done.
+            // 1.a. Get length of output_token from response. If this token is non-empty we need to renegotiate.
+            self.prepare_recv_gssapi_auth(2);
+            tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+
+            let mut renego_chalenge_len_buf = [0; 2];             
+            renego_chalenge_len_buf.copy_from_slice(&self.buf[0..2]);
+            
+            let renego_challenge_len =  u16::from_be_bytes(renego_chalenge_len_buf);
+            // If the sub_negotiation challenge is non-empty get the challenge returned and renegotiate.    
+            if renego_challenge_len > 0 {
+                /*
+                    If gss_init_sec_context returns GSS_S_CONTINUE_NEEDED, then the
+                    client should expect the server to issue a token in the
+                    subsequent subnegotiation response.  The client must pass the
+                    token to another call to gss_init_sec_context, and repeat this
+                    procedure until "continue" operations are complete.                
+                */
+                // Currently supporting only single re-negotitation.
+                            
+                self.prepare_recv_gssapi_auth(renego_challenge_len as usize);
+                tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+                
+                let renego_challenge = self.buf[0..usize::min(self.len, renego_challenge_len as usize)].to_vec();
+
+                self.prepare_send_gssapi_sec_context(Some(&renego_challenge));
+                tcp.write_all(&self.buf[self.ptr..self.len]).await?;
+
+                // Check for success, i.e no 
+                self.prepare_recv_gssapi_auth(2);
+                tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+
+                if self.buf[1] == 0xff {
+                    return Err(Error::GssapiAuthFailure(0));
+                } else {
+                    self.prepare_recv_gssapi_auth(2);
+                    tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+    
+                    let mut renego_chalenge_len_buf = [0; 2];             
+                    renego_chalenge_len_buf.copy_from_slice(&self.buf[0..2]);
+                    
+                    let renego_challenge_len =  u16::from_be_bytes(renego_chalenge_len_buf);
+                    // drain socket
+                    self.prepare_recv_gssapi_auth(renego_challenge_len as usize);
+                    tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+                    // assume negotiation has succeded. 
+                }
+            }
+            
+            self.prepare_send_gssapi_subnego_token();
+            tcp.write_all(&self.buf[self.ptr..self.len]).await?;
+
+            // recv response
+            self.prepare_recv_gssapi_auth(2);
+            tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?; 
+
+            if self.buf[1] == 0x02 {
+                // Subnegotiation was success.
+                // If there is anything sent by server. We can drain the remaining buf, as we do not need it. 
+                self.prepare_recv_gssapi_auth(2);
+                tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+
+                let mut remainder_len_buf = [0; 2];             
+                remainder_len_buf.copy_from_slice(&self.buf[0..2]);
+                let remainder_len =  u16::from_be_bytes(remainder_len_buf); 
+                self.prepare_recv_gssapi_auth(remainder_len as usize);
+                tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;   
+
+            } else {
+                return Err(Error::GssapiAuthFailure(self.buf[1]));
+            }
+        }
+        Ok(())
     }
 
     async fn password_authentication_protocol<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
@@ -425,6 +675,10 @@ where
             0x02 => {
                 self.password_authentication_protocol(tcp).await?;
             },
+            0x01 => {
+                // Gssapi Auth Selected -- currently only `required per-message integrity -- 0x01` supported is added for subnegotiation
+                self.gssapi_authentication_protocol(tcp).await?;
+            }
             0xff => {
                 return Err(Error::NoAcceptableAuthMethods);
             },
@@ -496,7 +750,7 @@ where
             },
             // Domain
             0x03 => {
-                let domain_bytes = (&self.buf[5..(self.len - 2)]).to_vec();
+                let domain_bytes = self.buf[5..(self.len - 2)].to_vec();
                 let domain = String::from_utf8(domain_bytes)
                     .map_err(|_| Error::InvalidTargetAddress("not a valid UTF-8 string"))?;
                 let port = u16::from_be_bytes([self.buf[self.len - 2], self.buf[self.len - 1]]);
@@ -583,8 +837,7 @@ impl Socks5Listener<TcpStream> {
 }
 
 impl<S> Socks5Listener<S>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
+where S: AsyncRead + AsyncWrite + Unpin
 {
     /// Initiates a BIND request to the specified proxy using the given socket
     /// to it.
@@ -597,9 +850,7 @@ where
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
     pub async fn bind_with_socket<'t, T>(socket: S, target: T) -> Result<Socks5Listener<S>>
-    where
-        T: IntoTargetAddr<'t>,
-    {
+    where T: IntoTargetAddr<'t> {
         Self::bind_with_auth_and_socket(Authentication::None, socket, target).await
     }
 
@@ -674,8 +925,7 @@ where
 }
 
 impl<T> AsyncRead for Socks5Stream<T>
-where
-    T: AsyncRead + Unpin,
+where T: AsyncRead + Unpin
 {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
@@ -683,8 +933,7 @@ where
 }
 
 impl<T> AsyncWrite for Socks5Stream<T>
-where
-    T: AsyncWrite + Unpin,
+where T: AsyncWrite + Unpin
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)

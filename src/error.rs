@@ -71,6 +71,9 @@ pub enum Error {
 
     #[error("Request rejected because the client program and identd report different user-ids")]
     InvalidUserIdAuthFailure,
+ 
+    #[error("Gssapi auth failure, code: {0}")]
+    GssapiAuthFailure(u8),
 }
 
 ///// Result type of `tokio-socks`
