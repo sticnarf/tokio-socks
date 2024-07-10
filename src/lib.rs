@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use either::Either;
 use futures_util::{
     future,
@@ -247,7 +248,14 @@ enum Authentication<'a> {
 }
 
 pub struct GssapiAuthenticator<'a> {
-    gssapi_authenticator: &'a dyn GssapiAuthentication<'a>
+    gssapi_authenticator: &'a dyn GssapiAuthentication<'a>,
+    renegotiate_sec_token: bool
+}
+
+impl<'a> GssapiAuthenticator<'a> {
+    pub fn new(gssapi_authenticator: &'a dyn GssapiAuthentication<'a>, renegotiate_sec_token: bool) -> Self {
+        GssapiAuthenticator{gssapi_authenticator, renegotiate_sec_token }
+    }
 }
 
 impl <'a>Debug for GssapiAuthenticator<'a> {
@@ -266,14 +274,15 @@ impl<'a> Authentication<'a> {
     }
 }
 
-pub trait GssapiAuthentication<'a>:  Send + Sync {
+#[async_trait]
+pub trait GssapiAuthentication<'a>: Send + Sync {
     // This method retrieves the security context token, 
     // server_challenge as None:    means return the first init_sec token
     // server_challenge as Some(x): means return the resp for the servers challenge
-    fn get_security_context(&self, server_challenge: Option<&[u8]>) -> &'a str;
+    async fn get_security_context(&self, server_challenge: Option<&[u8]>) -> std::result::Result<&'a str, Error>;
   
     // This method performs the subnegotiation step
-    fn get_protextion_level(&self) -> &'a str;
+    async fn get_protection_level(&self) -> std::result::Result<&'a str, Error>;
 }
   
 impl <'a>Debug for dyn GssapiAuthentication<'a> {

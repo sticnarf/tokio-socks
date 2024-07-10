@@ -371,7 +371,7 @@ where S: Stream<Item = Result<SocketAddr>> + Unpin
         self.len = 2;
     }
 
-    fn prepare_send_gssapi_subnego_token(&mut self) {
+    async fn prepare_send_gssapi_subnego_token(&mut self) -> Result<()> {
         if let Authentication::Gssapi { gssapi_authenticator } = &self.auth {
         /*
             https://www.rfc-editor.org/rfc/rfc1961
@@ -398,7 +398,7 @@ where S: Stream<Item = Result<SocketAddr>> + Unpin
             self.ptr = 0;
             self.buf[0] = 0x01;  // ver
             self.buf[1] = 0x02;  // mtyp
-            let snego_token = gssapi_authenticator.gssapi_authenticator.get_protextion_level();
+            let snego_token = gssapi_authenticator.gssapi_authenticator.get_protection_level().await?;
             let snego_token_bytes = snego_token.as_bytes();
             let snego_token_len = snego_token_bytes.len();
             self.buf[2] = snego_token_len as u8; // len
@@ -408,10 +408,11 @@ where S: Stream<Item = Result<SocketAddr>> + Unpin
         } else {
             unreachable!()
         }
+        Ok(())
 
     }
 
-    fn prepare_send_gssapi_sec_context(&mut self, renegotiate_token: Option<&[u8]>) {
+    async fn prepare_send_gssapi_sec_context(&mut self, renegotiate_token: Option<&[u8]>) -> Result<()> {
         if let Authentication::Gssapi { gssapi_authenticator  } = &self.auth {
         /*
             https://www.rfc-editor.org/rfc/rfc1961
@@ -443,7 +444,7 @@ where S: Stream<Item = Result<SocketAddr>> + Unpin
             self.buf[0] = 0x01;  // ver
             self.buf[1] = 0x01;  // mtyp
             
-            let context_token =  gssapi_authenticator.gssapi_authenticator.get_security_context(renegotiate_token);                        
+            let context_token =  gssapi_authenticator.gssapi_authenticator.get_security_context(renegotiate_token).await?;                        
             let context_token_bytes = context_token.as_bytes();
             let context_token_len = context_token_bytes.len();
             self.buf[2] = context_token_len as u8; // len
@@ -453,6 +454,7 @@ where S: Stream<Item = Result<SocketAddr>> + Unpin
         } else {
             unreachable!()
         }
+        Ok(())
     }
 
     fn prepare_send_password_auth(&mut self) {
@@ -520,13 +522,13 @@ where S: Stream<Item = Result<SocketAddr>> + Unpin
     async fn gssapi_authentication_protocol<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
         // Implement Gssapi Auth Protocol.
         // Error out if: Server selected gssapi but, we had None
-        match self.auth {
-            Authentication::Gssapi { .. } => (),
+        let renegotiate_sec_token = match &self.auth {
+            Authentication::Gssapi { gssapi_authenticator } => gssapi_authenticator.renegotiate_sec_token,
             _ => return Err(Error::InvalidAuthValues("Server expected GSSApi auth")),
-        }
+        };
 
         // Send sec_context token for first time with no renegotiation.
-        self.prepare_send_gssapi_sec_context(None);
+        self.prepare_send_gssapi_sec_context(None).await?;
         tcp.write_all(&self.buf[self.ptr..self.len]).await?;
 
         // Recieve and Validate server response 
@@ -586,33 +588,36 @@ where S: Stream<Item = Result<SocketAddr>> + Unpin
                 self.prepare_recv_gssapi_auth(renego_challenge_len as usize);
                 tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
                 
-                let renego_challenge = self.buf[0..usize::min(self.len, renego_challenge_len as usize)].to_vec();
+                // Do renegotiation only if user has specified to do so.
+                if renegotiate_sec_token {
+                    let renego_challenge = self.buf[0..usize::min(self.len, renego_challenge_len as usize)].to_vec();
 
-                self.prepare_send_gssapi_sec_context(Some(&renego_challenge));
-                tcp.write_all(&self.buf[self.ptr..self.len]).await?;
-
-                // Check for success, i.e no 
-                self.prepare_recv_gssapi_auth(2);
-                tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
-
-                if self.buf[1] == 0xff {
-                    return Err(Error::GssapiAuthFailure(0));
-                } else {
+                    self.prepare_send_gssapi_sec_context(Some(&renego_challenge)).await?;
+                    tcp.write_all(&self.buf[self.ptr..self.len]).await?;
+    
+                    // Check for success, i.e no 
                     self.prepare_recv_gssapi_auth(2);
                     tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
     
-                    let mut renego_chalenge_len_buf = [0; 2];             
-                    renego_chalenge_len_buf.copy_from_slice(&self.buf[0..2]);
-                    
-                    let renego_challenge_len =  u16::from_be_bytes(renego_chalenge_len_buf);
-                    // drain socket
-                    self.prepare_recv_gssapi_auth(renego_challenge_len as usize);
-                    tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
-                    // assume negotiation has succeded. 
+                    if self.buf[1] == 0xff {
+                        return Err(Error::GssapiAuthFailure(0));
+                    } else {
+                        self.prepare_recv_gssapi_auth(2);
+                        tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+        
+                        let mut renego_chalenge_len_buf = [0; 2];             
+                        renego_chalenge_len_buf.copy_from_slice(&self.buf[0..2]);
+                        
+                        let renego_challenge_len =  u16::from_be_bytes(renego_chalenge_len_buf);
+                        // drain socket
+                        self.prepare_recv_gssapi_auth(renego_challenge_len as usize);
+                        tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+                        // assume negotiation has succeded.     
+                }
                 }
             }
             
-            self.prepare_send_gssapi_subnego_token();
+            self.prepare_send_gssapi_subnego_token().await?;
             tcp.write_all(&self.buf[self.ptr..self.len]).await?;
 
             // recv response
