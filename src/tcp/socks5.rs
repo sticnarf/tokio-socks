@@ -355,12 +355,12 @@ where S: Stream<Item = Result<SocketAddr>> + Unpin
                 self.buf[1..3].copy_from_slice(&[1, 0x00]);
                 self.len = 3;
             },
-            Authentication::Password { .. } => {
-                self.buf[1..4].copy_from_slice(&[2, 0x00, 0x02]);
-                self.len = 4;
-            },
             Authentication::Gssapi { .. } => {
                 self.buf[1..4].copy_from_slice(&[2, 0x00, 0x01]);
+                self.len = 4;
+            },
+            Authentication::Password { .. } => {
+                self.buf[1..4].copy_from_slice(&[2, 0x00, 0x02]);
                 self.len = 4;
             },
         }
@@ -520,9 +520,11 @@ where S: Stream<Item = Result<SocketAddr>> + Unpin
     async fn gssapi_authentication_protocol<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
         // Implement Gssapi Auth Protocol.
         // Error out if: Server selected gssapi but, we had None
-        if let Authentication::None = self.auth {
-            return Err(Error::AuthorizationRequired);
+        match self.auth {
+            Authentication::Gssapi { .. } => (),
+            _ => return Err(Error::InvalidAuthValues("Server expected GSSApi auth")),
         }
+
         // Send sec_context token for first time with no renegotiation.
         self.prepare_send_gssapi_sec_context(None);
         tcp.write_all(&self.buf[self.ptr..self.len]).await?;
