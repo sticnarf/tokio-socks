@@ -1,3 +1,4 @@
+use crate::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use crate::{Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
 use futures_util::stream::{self, Fuse, Stream, StreamExt};
 use std::{
@@ -8,10 +9,8 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
-    net::TcpStream,
-};
+#[cfg(feature = "tokio")]
+use tokio::net::TcpStream;
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -43,6 +42,7 @@ impl<S> DerefMut for Socks4Stream<S> {
     }
 }
 
+#[cfg(feature = "tokio")]
 impl Socks4Stream<TcpStream> {
     /// Connects to a target server through a SOCKS4 proxy given the proxy
     /// address.
@@ -214,6 +214,7 @@ where
         }
     }
 
+    #[cfg(feature = "tokio")]
     /// Connect to the proxy server, authenticate and issue the SOCKS command
     pub async fn execute(&mut self) -> Result<Socks4Stream<TcpStream>> {
         let next_addr = self.proxy.select_next_some().await?;
@@ -304,7 +305,16 @@ where
         */
 
         self.prepare_recv_reply();
-        self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+        #[cfg(feature = "tokio")]
+        {
+            self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+        }
+        #[cfg(not(feature = "tokio"))]
+        {
+            tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+            self.ptr = self.len;
+        }
+
         if self.buf[0] != 0 {
             return Err(Error::InvalidResponseVersion);
         }
@@ -335,6 +345,7 @@ pub struct Socks4Listener<S> {
     inner: Socks4Stream<S>,
 }
 
+#[cfg(feature = "tokio")]
 impl Socks4Listener<TcpStream> {
     /// Initiates a BIND request to the specified proxy.
     ///
@@ -492,28 +503,33 @@ where
     }
 }
 
-impl<T> AsyncRead for Socks4Stream<T>
-where
-    T: AsyncRead + Unpin,
-{
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
-    }
-}
-
-impl<T> AsyncWrite for Socks4Stream<T>
-where
-    T: AsyncWrite + Unpin,
-{
-    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
+#[cfg(feature = "tokio")]
+mod tokio_io {
+    use super::*;
+    use tokio::io::ReadBuf;
+    impl<T> AsyncRead for Socks4Stream<T>
+    where
+        T: AsyncRead + Unpin,
+    {
+        fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+            AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
+        }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
-    }
+    impl<T> AsyncWrite for Socks4Stream<T>
+    where
+        T: AsyncWrite + Unpin,
+    {
+        fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+            AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
+        }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_shutdown(Pin::new(&mut self.socket), cx)
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
+        }
+
+        fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            AsyncWrite::poll_shutdown(Pin::new(&mut self.socket), cx)
+        }
     }
 }

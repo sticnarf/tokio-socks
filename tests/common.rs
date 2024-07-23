@@ -11,11 +11,11 @@ use tokio::{
 };
 use tokio_socks::{tcp::socks4::Socks4Listener, tcp::socks5::Socks5Listener, Error, Result};
 
-pub const UNIX_PROXY_ADDR: &'static str = "/tmp/proxy.s";
-pub const PROXY_ADDR: &'static str = "127.0.0.1:41080";
-pub const UNIX_SOCKS4_PROXY_ADDR: &'static str = "/tmp/socks4_proxy.s";
-pub const SOCKS4_PROXY_ADDR: &'static str = "127.0.0.1:41081";
-pub const ECHO_SERVER_ADDR: &'static str = "localhost:10007";
+pub const UNIX_PROXY_ADDR: &str = "/tmp/proxy.s";
+pub const PROXY_ADDR: &str = "127.0.0.1:41080";
+pub const UNIX_SOCKS4_PROXY_ADDR: &str = "/tmp/socks4_proxy.s";
+pub const SOCKS4_PROXY_ADDR: &str = "127.0.0.1:41081";
+pub const ECHO_SERVER_ADDR: &str = "localhost:10007";
 pub const MSG: &[u8] = b"hello";
 
 pub async fn echo_server() -> Result<()> {
@@ -58,7 +58,7 @@ pub fn test_bind<S: 'static + AsyncRead + AsyncWrite + Unpin + Send>(listener: S
     Ok(())
 }
 
-pub async fn connect_unix(proxy_addr: &'static str) -> Result<UnixStream> {
+pub async fn connect_unix(proxy_addr: &str) -> Result<UnixStream> {
     UnixStream::connect(proxy_addr).await.map_err(Error::Io)
 }
 
