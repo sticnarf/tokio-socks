@@ -439,7 +439,6 @@ where
 
     async fn receive_reply<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<TargetAddr<'static>> {
         self.prepare_recv_reply();
-        self.prepare_recv_reply();
         #[cfg(feature = "tokio")]
         {
             self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
@@ -481,7 +480,6 @@ where
             // Domain
             0x03 => {
                 self.len = 5;
-                self.prepare_recv_reply();
                 #[cfg(feature = "tokio")]
                 {
                     self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
@@ -496,7 +494,6 @@ where
             _ => Err(Error::UnknownAddressType)?,
         }
 
-        self.prepare_recv_reply();
         #[cfg(feature = "tokio")]
         {
             self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
