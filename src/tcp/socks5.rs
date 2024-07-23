@@ -1,5 +1,5 @@
 use crate::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use crate::{Authentication, Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
+use crate::{Authentication, Error, IntoTargetAddr, Result, TargetAddr};
 use futures_util::stream::{self, Fuse, Stream, StreamExt};
 use std::{
     borrow::Borrow,
@@ -180,15 +180,15 @@ where
         .await
     }
 
-    fn validate_auth<'a>(auth: &Authentication<'a>) -> Result<()> {
+    fn validate_auth(auth: &Authentication<'_>) -> Result<()> {
         match auth {
             Authentication::Password { username, password } => {
                 let username_len = username.as_bytes().len();
-                if username_len < 1 || username_len > 255 {
+                if !(1..=255).contains(&username_len) {
                     Err(Error::InvalidAuthValues("username length should between 1 to 255"))?
                 }
                 let password_len = password.as_bytes().len();
-                if password_len < 1 || password_len > 255 {
+                if !(1..=255).contains(&password_len) {
                     Err(Error::InvalidAuthValues("password length should between 1 to 255"))?
                 }
             },
@@ -259,6 +259,7 @@ where
 }
 
 /// A `Future` which resolves to a socket to the target server through proxy.
+#[allow(dead_code)]
 pub struct SocksConnector<'a, 't, S> {
     auth: Authentication<'a>,
     command: Command,
@@ -524,7 +525,7 @@ where
             },
             // Domain
             0x03 => {
-                let domain_bytes = (&self.buf[5..(self.len - 2)]).to_vec();
+                let domain_bytes = self.buf[5..(self.len - 2)].to_vec();
                 let domain = String::from_utf8(domain_bytes)
                     .map_err(|_| Error::InvalidTargetAddress("not a valid UTF-8 string"))?;
                 let port = u16::from_be_bytes([self.buf[self.len - 2], self.buf[self.len - 1]]);
@@ -546,6 +547,9 @@ where
 pub struct Socks5Listener<S> {
     inner: Socks5Stream<S>,
 }
+
+#[cfg(feature = "tokio")]
+use crate::ToProxyAddrs;
 
 #[cfg(feature = "tokio")]
 impl Socks5Listener<TcpStream> {
@@ -699,6 +703,36 @@ where
             socket: self.inner.socket,
             target,
         })
+    }
+}
+
+#[cfg(not(feature = "tokio"))]
+mod futures_io {
+    use super::*;
+    impl<T> AsyncRead for Socks5Stream<T>
+    where
+        T: AsyncRead + Unpin,
+    {
+        fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+            AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
+        }
+    }
+
+    impl<T> AsyncWrite for Socks5Stream<T>
+    where
+        T: AsyncWrite + Unpin,
+    {
+        fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+            AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
+        }
+
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
+        }
+
+        fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            AsyncWrite::poll_close(Pin::new(&mut self.socket), cx)
+        }
     }
 }
 

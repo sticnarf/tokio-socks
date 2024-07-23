@@ -1,5 +1,5 @@
 use crate::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use crate::{Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
+use crate::{Error, IntoTargetAddr, Result, TargetAddr};
 use futures_util::stream::{self, Fuse, Stream, StreamExt};
 use std::{
     borrow::Borrow,
@@ -41,6 +41,9 @@ impl<S> DerefMut for Socks4Stream<S> {
         &mut self.socket
     }
 }
+
+#[cfg(feature = "tokio")]
+use crate::ToProxyAddrs;
 
 #[cfg(feature = "tokio")]
 impl Socks4Stream<TcpStream> {
@@ -138,13 +141,13 @@ where
         Self::execute_command_with_socket(socket, target, Some(user_id), CommandV4::Connect).await
     }
 
-    fn validate_userid<'a>(user_id: Option<&'a str>) -> Result<()> {
+    fn validate_userid(user_id: Option<&str>) -> Result<()> {
         /*
             A hardcode limit for length of userid must be enforced to avoid, buffer overflow.
         */
         if let Some(user_id) = user_id {
             let user_id_len = user_id.len();
-            if user_id_len < 1 || user_id_len > 255 {
+            if !(1..=255).contains(&user_id_len) {
                 Err(Error::InvalidAuthValues("userid length should between 1 to 255"))?
             }
         }
@@ -188,6 +191,7 @@ where
 }
 
 /// A `Future` which resolves to a socket to the target server through proxy.
+#[allow(dead_code)]
 pub struct Socks4Connector<'a, 't, S> {
     user_id: Option<&'a str>,
     command: CommandV4,
@@ -500,6 +504,36 @@ where
             socket: self.inner.socket,
             target,
         })
+    }
+}
+
+#[cfg(not(feature = "tokio"))]
+mod futures_io {
+    use super::*;
+    impl<T> AsyncRead for Socks4Stream<T>
+    where
+        T: AsyncRead + Unpin,
+    {
+        fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+            AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
+        }
+    }
+
+    impl<T> AsyncWrite for Socks4Stream<T>
+    where
+        T: AsyncWrite + Unpin,
+    {
+        fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+            AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
+        }
+
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
+        }
+
+        fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            AsyncWrite::poll_close(Pin::new(&mut self.socket), cx)
+        }
     }
 }
 
