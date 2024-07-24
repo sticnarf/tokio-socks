@@ -20,7 +20,12 @@ jobs:
           components: clippy
           override: true
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: |
+          cargo clippy --all-targets -- -D warnings
+          cargo clippy --all-targets --no-default-features -- -D warnings
+          cd test_utils
+          cargo clippy -- -D warnings
+          cargo clippy --features=tokio -- -D warnings
       - name: Install 3proxy
         run: |
           cd $HOME
@@ -29,13 +34,16 @@ jobs:
           cd 3proxy-0.8.13 && ln -s Makefile.Linux Makefile && make -j$(nproc)
           sudo apt-get update
           sudo apt-get install socat -y
-      - name: Run tests for tokio
+      - name: Build
         run: |
           cargo build --examples
           cargo build --verbose --all
           cargo test --lib --verbose
-          env PATH=$HOME/3proxy-0.8.13/src:$PATH tests/integration_tests.sh
-      - name: Run tests for futures
+      - name: Build No-Default Features
         run: |
-          cargo test --lib --verbose
+          cargo build --examples --no-default-features
+          cargo build --verbose --all --no-default-features
+          cargo test --lib --verbose --no-default-features
+      - name: Integration tests
+        run: |
           env PATH=$HOME/3proxy-0.8.13/src:$PATH tests/integration_tests.sh

@@ -1,15 +1,11 @@
-mod common;
-
-use crate::common::runtime;
-use common::{
-    connect_unix, test_bind_socks4, test_connect, ECHO_SERVER_ADDR, SOCKS4_PROXY_ADDR, UNIX_SOCKS4_PROXY_ADDR,
-};
+use test_utils::*;
 use tokio_socks::{
     tcp::socks4::{Socks4Listener, Socks4Stream},
     Result,
 };
 
 #[test]
+#[cfg(feature = "tokio")]
 fn connect_no_auth() -> Result<()> {
     let runtime = runtime().lock().unwrap();
     let conn = runtime.block_on(Socks4Stream::connect(SOCKS4_PROXY_ADDR, ECHO_SERVER_ADDR))?;
@@ -17,6 +13,7 @@ fn connect_no_auth() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "tokio")]
 fn bind_no_auth() -> Result<()> {
     let bind = {
         let runtime = runtime().lock().unwrap();

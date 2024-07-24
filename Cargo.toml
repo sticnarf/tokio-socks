@@ -10,15 +10,10 @@ keywords = ["tokio", "async", "proxy", "socks", "socks5"]
 license = "MIT"
 version = "0.5.2"
 authors = ["Yilin Chen <sticnarf@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [badges]
 travis-ci = { repository = "sticnarf/tokio-socks" }
-
-[features]
-default = ["tokio"]
-futures = ["futures_compat"]
-tor = []
 
 [[example]]
 name = "socket"
@@ -26,21 +21,26 @@ required-features = ["tor"]
 
 [[example]]
 name = "tor"
-required-features = ["tor"]
+required-features = ["tor", "tokio"]
 
 [dependencies]
 futures-util = { version = "0.3", default-features = false }
-tokio = { version = "1.0", features = ["io-util", "net"], optional = true }
+tokio = { version = "1.0", default-features = false, features = [
+    "io-util",
+    "net",
+], optional = true }
 either = "1"
 thiserror = "1.0"
-futures_compat = { package = "futures", version = "0.3", default-features = false, features = [
-    "std",
-], optional = true }
+futures = { version = "0.3", default-features = false, features = ["std"] }
 
 [dev-dependencies]
-test-utils = { path = "test-utils" }
 futures-executor = "0.3"
 tokio = { version = "1.0", features = ["io-util", "rt-multi-thread", "net"] }
-smol = "2.0"
-once_cell = "1.2.0"
-hyper = "0.14"
+test_utils = { path = "test_utils" }
+async-std = "1.12"
+
+[features]
+default = ["with-tokio"]
+with-tokio = ["tokio", "test_utils/tokio"]
+tor = []
+test-support = []

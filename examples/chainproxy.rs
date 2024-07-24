@@ -2,11 +2,17 @@
 //!
 //! This example make uses of several public proxy.
 
+#[cfg(not(feature = "tokio"))]
+use async_std::net::TcpStream;
+#[cfg(not(feature = "tokio"))]
+use futures_util::{AsyncReadExt, AsyncWriteExt};
+#[cfg(feature = "tokio")]
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     runtime::Runtime,
 };
+
 use tokio_socks::{tcp::socks5::Socks5Stream, Error};
 
 const PROXY_ADDR: [&str; 2] = ["184.176.166.20:4145", "90.89.205.248:1080"]; // public proxies found here : http://spys.one/en/socks-proxy-list/
@@ -27,7 +33,13 @@ async fn connect_chained_proxy() -> Result<(), Error> {
     Ok(())
 }
 
+#[cfg(feature = "tokio")]
 fn main() {
     let rt = Runtime::new().unwrap();
     rt.block_on(connect_chained_proxy()).unwrap();
+}
+
+#[cfg(not(feature = "tokio"))]
+fn main() {
+    async_std::task::block_on(connect_chained_proxy()).unwrap();
 }

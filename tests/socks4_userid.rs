@@ -1,11 +1,8 @@
-mod common;
-
-use common::{
-    connect_unix, runtime, test_bind_socks4, test_connect, ECHO_SERVER_ADDR, SOCKS4_PROXY_ADDR, UNIX_SOCKS4_PROXY_ADDR,
-};
+use test_utils::*;
 use tokio_socks::{tcp::socks4::*, Result};
 
 #[test]
+#[cfg(feature = "tokio")]
 fn connect_userid() -> Result<()> {
     let runtime = runtime().lock().unwrap();
     let conn = runtime.block_on(Socks4Stream::connect_with_userid(
@@ -17,6 +14,7 @@ fn connect_userid() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "tokio")]
 fn bind_userid() -> Result<()> {
     let bind = {
         let runtime = runtime().lock().unwrap();
