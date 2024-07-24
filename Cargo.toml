@@ -42,7 +42,6 @@ thiserror = "1.0"
 [dev-dependencies]
 futures-executor = "0.3"
 tokio = { version = "1.0", features = ["io-util", "rt-multi-thread", "net"] }
-async-std = { version = "1.12" }
 
 [features]
 default = ["tokio"]

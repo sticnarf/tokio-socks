@@ -11,7 +11,6 @@ tokio = { version = "1.0", features = [
 ], optional = true }
 test_utils = { path = "../test_utils" }
 tokio-socks = { path = "..", default-features = false }
-async-std = { version = "1.12", optional = true }
 
 [features]
 default = ["use_tokio"]

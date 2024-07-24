@@ -24,25 +24,6 @@ sleep 2
 echo ""
 echo ""
 echo ""
-echo "Testing no-default features"
-for test in ${list}; do
-    3proxy ${dir}/${test}.cfg
-    sleep 1
-    cargo test --test ${test} --no-default-features -- --test-threads 1
-    test_exit_code=$?
-
-    pkill -F /tmp/3proxy-test.pid
-    sleep 1
-
-    if test "$test_exit_code" -ne 0; then
-        echo "Test failed: ${test}"
-        break
-    fi
-done
-
-echo ""
-echo ""
-echo ""
 echo "Testing with default features (tokio)"
 for test in ${list}; do
     3proxy ${dir}/${test}.cfg
@@ -55,9 +36,25 @@ for test in ${list}; do
 
     if test "$test_exit_code" -ne 0; then
         echo "Test failed: ${test}"
-        break
+        exit ${test_exit_code}
     fi
 done
 
-# pkill -F /tmp/socat-test.pid
-exit ${test_exit_code}
+echo ""
+echo ""
+echo ""
+echo "Testing no-default features"
+for test in ${list}; do
+    3proxy ${dir}/${test}.cfg
+    sleep 1
+    cargo test --test ${test} --no-default-features -- --test-threads 1
+    test_exit_code=$?
+
+    pkill -F /tmp/3proxy-test.pid
+    sleep 1
+
+    if test "$test_exit_code" -ne 0; then
+        echo "Test failed: ${test}"
+        exit ${test_exit_code}
+    fi
+done
