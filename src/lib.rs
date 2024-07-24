@@ -5,7 +5,7 @@ use futures_util::{
 };
 use std::{
     borrow::Cow,
-    io,
+    io::Result as IoResult,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     pin::Pin,
     task::{Context, Poll},
@@ -51,7 +51,7 @@ impl<'a> ToProxyAddrs for &'a [SocketAddr] {
     type Output = ProxyAddrsStream;
 
     fn to_proxy_addrs(&self) -> Self::Output {
-        ProxyAddrsStream(Some(io::Result::Ok(self.to_vec().into_iter())))
+        ProxyAddrsStream(Some(IoResult::Ok(self.to_vec().into_iter())))
     }
 }
 
@@ -79,7 +79,7 @@ impl<'a, T: ToProxyAddrs + ?Sized> ToProxyAddrs for &'a T {
     }
 }
 
-pub struct ProxyAddrsStream(Option<io::Result<vec::IntoIter<SocketAddr>>>);
+pub struct ProxyAddrsStream(Option<IoResult<vec::IntoIter<SocketAddr>>>);
 
 impl Stream for ProxyAddrsStream {
     type Item = Result<SocketAddr>;
@@ -123,7 +123,7 @@ impl<'a> TargetAddr<'a> {
 impl<'a> ToSocketAddrs for TargetAddr<'a> {
     type Iter = Either<std::option::IntoIter<SocketAddr>, std::vec::IntoIter<SocketAddr>>;
 
-    fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
+    fn to_socket_addrs(&self) -> IoResult<Self::Iter> {
         Ok(match self {
             TargetAddr::Ip(addr) => Either::Left(addr.to_socket_addrs()?),
             TargetAddr::Domain(domain, port) => Either::Right((&**domain, *port).to_socket_addrs()?),
@@ -260,6 +260,7 @@ impl<'a> Authentication<'a> {
 }
 
 mod error;
+pub mod io;
 pub mod tcp;
 
 #[cfg(test)]
