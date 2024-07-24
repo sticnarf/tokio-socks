@@ -42,10 +42,8 @@ thiserror = "1.0"
 [dev-dependencies]
 futures-executor = "0.3"
 tokio = { version = "1.0", features = ["io-util", "rt-multi-thread", "net"] }
-test_utils = { path = "test_utils" }
-async-std = "1.12"
+async-std = { version = "1.12" }
 
 [features]
-default = []
-with-tokio = ["tokio", "test_utils/tokio"]
+default = ["tokio"]
 tor = []
