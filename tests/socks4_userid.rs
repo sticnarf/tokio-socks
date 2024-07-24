@@ -1,5 +1,8 @@
 mod common;
-use common::*;
+
+use common::{
+    connect_unix, runtime, test_bind_socks4, test_connect, ECHO_SERVER_ADDR, SOCKS4_PROXY_ADDR, UNIX_SOCKS4_PROXY_ADDR,
+};
 use tokio_socks::{tcp::socks4::*, Result};
 
 #[test]

@@ -1,5 +1,9 @@
 mod common;
-use common::*;
+
+use crate::common::runtime;
+use common::{
+    connect_unix, test_bind_socks4, test_connect, ECHO_SERVER_ADDR, SOCKS4_PROXY_ADDR, UNIX_SOCKS4_PROXY_ADDR,
+};
 use tokio_socks::{
     tcp::socks4::{Socks4Listener, Socks4Stream},
     Result,
