@@ -1,4 +1,5 @@
-use test_utils::*;
+mod common;
+use common::*;
 use tokio_socks::{
     tcp::socks4::{Socks4Listener, Socks4Stream},
     Result,

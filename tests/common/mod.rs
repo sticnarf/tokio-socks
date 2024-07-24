@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #[cfg(not(feature = "tokio"))]
 pub mod futures_utils;
 #[cfg(feature = "tokio")]

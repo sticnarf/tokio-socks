@@ -2,11 +2,6 @@
 //!
 //! This example make uses of several public proxy.
 
-#[cfg(not(feature = "tokio"))]
-use async_std::net::TcpStream;
-#[cfg(not(feature = "tokio"))]
-use futures_util::{AsyncReadExt, AsyncWriteExt};
-#[cfg(feature = "tokio")]
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -32,13 +27,7 @@ async fn connect_chained_proxy() -> Result<(), Error> {
     Ok(())
 }
 
-#[cfg(feature = "tokio")]
 fn main() {
     let rt = Runtime::new().unwrap();
     rt.block_on(connect_chained_proxy()).unwrap();
-}
-
-#[cfg(not(feature = "tokio"))]
-fn main() {
-    async_std::task::block_on(connect_chained_proxy()).unwrap();
 }

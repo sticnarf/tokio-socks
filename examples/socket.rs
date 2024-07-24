@@ -2,11 +2,6 @@
 //!
 //! This example requires a running tor proxy.
 
-#[cfg(not(feature = "tokio"))]
-use async_std::{net::TcpStream, os::unix::net::UnixStream};
-#[cfg(not(feature = "tokio"))]
-use futures_util::{AsyncReadExt, AsyncWriteExt};
-#[cfg(feature = "tokio")]
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpStream, UnixStream},
@@ -43,13 +38,7 @@ async fn connect() -> Result<(), Error> {
     Ok(())
 }
 
-#[cfg(feature = "tokio")]
 fn main() {
     let rt = Runtime::new().unwrap();
     rt.block_on(connect()).unwrap();
-}
-
-#[cfg(not(feature = "tokio"))]
-fn main() {
-    async_std::task::block_on(connect()).unwrap();
 }

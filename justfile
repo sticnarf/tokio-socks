@@ -3,14 +3,6 @@ test:
     cargo clippy --all-targets --features=tor -- -D warnings
     cargo clippy --all-targets --no-default-features -- -D warnings
     cargo clippy --all-targets --no-default-features --features=tor -- -D warnings
-    cd test_utils
-    cargo clippy -- -D warnings
-    cargo clippy --features=tokio -- -D warnings
-    cd ..
-    cd integration-tests
-    cargo clippy -- -D warnings
-    cargo clippy --no-default-features -- -D warnings
-    cd ..
     cargo build --examples
     cargo build --verbose --all
     cargo test --lib --verbose
