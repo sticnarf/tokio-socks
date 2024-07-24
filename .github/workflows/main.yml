@@ -28,6 +28,11 @@ jobs:
           cd test_utils
           cargo clippy -- -D warnings
           cargo clippy --features=tokio -- -D warnings
+          cd ..
+          cd integration-tests
+          cargo clippy -- -D warnings
+          cargo clippy --no-default-features -- -D warnings
+          cd ..
       - name: Install 3proxy
         run: |
           cd $HOME
@@ -57,5 +62,6 @@ jobs:
           cargo build --verbose --all --no-default-features --features=tor
           cargo test --lib --verbose --no-default-features --features=tor
       - name: Integration tests
+        working-directory: ./integration-tests
         run: |
           env PATH=$HOME/3proxy-0.8.13/src:$PATH tests/integration_tests.sh
