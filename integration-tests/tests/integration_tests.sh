@@ -24,11 +24,11 @@ sleep 2
 echo ""
 echo ""
 echo ""
-echo "Testing with default features (tokio)"
+echo "Testing no-default features"
 for test in ${list}; do
     3proxy ${dir}/${test}.cfg
     sleep 1
-    cargo test --test ${test} -- --test-threads 1
+    cargo test --test ${test} --no-default-features -- --test-threads 1
     test_exit_code=$?
 
     pkill -F /tmp/3proxy-test.pid
@@ -43,11 +43,11 @@ done
 echo ""
 echo ""
 echo ""
-echo "Testing no-default features"
+echo "Testing with default features (tokio)"
 for test in ${list}; do
     3proxy ${dir}/${test}.cfg
     sleep 1
-    cargo test --test ${test} --no-default-features -- --test-threads 1
+    cargo test --test ${test} -- --test-threads 1
     test_exit_code=$?
 
     pkill -F /tmp/3proxy-test.pid
