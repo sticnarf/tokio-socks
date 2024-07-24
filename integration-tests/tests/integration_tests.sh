@@ -21,9 +21,9 @@ socat UNIX-LISTEN:${SOCK},reuseaddr,fork TCP:${PROXY_HOST} &
 socat UNIX-LISTEN:${SOCK4},reuseaddr,fork TCP:${SOCKS4_PROXY_HOST} &
 sleep 2
 
-echo "\n"
-echo "\n"
-echo "\n"
+echo ""
+echo ""
+echo ""
 echo "Testing with default features (tokio)"
 for test in ${list}; do
     3proxy ${dir}/${test}.cfg
@@ -36,26 +36,28 @@ for test in ${list}; do
 
     if test "$test_exit_code" -ne 0; then
         echo "Test failed: ${test}"
+        break
     fi
 done
 
-# echo "\n"
-# echo "\n"
-# echo "\n"
-# echo "Testing without default features"
-# for test in ${list}; do
-#     3proxy ${dir}/${test}.cfg
-#     sleep 1
-#     cargo test --test ${test} --no-default-features -- --test-threads 1
-#     test_exit_code=$?
+echo ""
+echo ""
+echo ""
+echo "Testing no-default features"
+for test in ${list}; do
+    3proxy ${dir}/${test}.cfg
+    sleep 1
+    cargo test --test ${test} --no-default-features -- --test-threads 1
+    test_exit_code=$?
 
-#     pkill -F /tmp/3proxy-test.pid
-#     sleep 1
+    pkill -F /tmp/3proxy-test.pid
+    sleep 1
 
-#     if test "$test_exit_code" -ne 0; then
-#         echo "Test failed: ${test}"
-#     fi
-# done
+    if test "$test_exit_code" -ne 0; then
+        echo "Test failed: ${test}"
+        break
+    fi
+done
 
 # pkill -F /tmp/socat-test.pid
 exit ${test_exit_code}
