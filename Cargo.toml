@@ -46,4 +46,3 @@ async-std = "1.12"
 default = ["with-tokio"]
 with-tokio = ["tokio", "test_utils/tokio"]
 tor = []
-test-support = []
