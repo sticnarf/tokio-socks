@@ -35,7 +35,7 @@ for test in ${list}; do
     sleep 1
 
     if test "$test_exit_code" -ne 0; then
-        break
+        echo "Test failed: ${test}"
     fi
 done
 
@@ -53,7 +53,7 @@ for test in ${list}; do
     sleep 1
 
     if test "$test_exit_code" -ne 0; then
-        break
+        echo "Test failed: ${test}"
     fi
 done
 
