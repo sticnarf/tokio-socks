@@ -82,13 +82,3 @@ pub fn test_bind_socks4<S: 'static + AsyncRead + AsyncWrite + Unpin + Send>(list
     assert_eq!(&buf[..], MSG);
     Ok(())
 }
-
-// impl Runtime {
-//     pub fn spawn<T: Send + 'static>(&self, future: impl Future<Output = T> + Send + 'static) {
-//         async_std::task::spawn(future);
-//     }
-
-//     pub fn block_on<T>(&self, future: impl Future<Output = T>) -> T {
-//         async_std::task::block_on(future)
-//     }
-// }
