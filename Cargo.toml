@@ -35,7 +35,6 @@ tokio = { version = "1.0", default-features = false, features = [
 ], optional = true }
 either = "1"
 thiserror = "1.0"
-futures = { version = "0.3", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 futures-executor = "0.3"
