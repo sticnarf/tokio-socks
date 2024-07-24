@@ -43,6 +43,6 @@ test_utils = { path = "test_utils" }
 async-std = "1.12"
 
 [features]
-default = ["with-tokio"]
+default = []
 with-tokio = ["tokio", "test_utils/tokio"]
 tor = []

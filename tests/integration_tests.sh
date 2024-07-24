@@ -21,11 +21,14 @@ socat UNIX-LISTEN:${SOCK},reuseaddr,fork TCP:${PROXY_HOST} &
 socat UNIX-LISTEN:${SOCK4},reuseaddr,fork TCP:${SOCKS4_PROXY_HOST} &
 sleep 2
 
-echo "Testing with default features (tokio)"
+echo ""
+echo ""
+echo ""
+echo "Testing without default features"
 for test in ${list}; do
     3proxy ${dir}/${test}.cfg
     sleep 1
-    cargo test --test ${test} -- --test-threads 1
+    cargo test --test ${test} --no-default-features -- --test-threads 1
     test_exit_code=$?
 
     pkill -F /tmp/3proxy-test.pid
@@ -36,11 +39,14 @@ for test in ${list}; do
     fi
 done
 
-echo "Testing without default features"
+echo ""
+echo ""
+echo ""
+echo "Testing with default features (tokio)"
 for test in ${list}; do
     3proxy ${dir}/${test}.cfg
     sleep 1
-    cargo test --test ${test} --no-default-features -- --test-threads 1
+    cargo test --test ${test} -- --test-threads 1
     test_exit_code=$?
 
     pkill -F /tmp/3proxy-test.pid
