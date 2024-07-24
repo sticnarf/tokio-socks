@@ -16,6 +16,10 @@ edition = "2021"
 travis-ci = { repository = "sticnarf/tokio-socks" }
 
 [[example]]
+name = "chainproxy"
+required-features = []
+
+[[example]]
 name = "socket"
 required-features = ["tor"]
 

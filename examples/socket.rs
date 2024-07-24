@@ -8,7 +8,7 @@ use futures_util::{AsyncReadExt, AsyncWriteExt};
 #[cfg(feature = "tokio")]
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
+    net::{TcpStream, UnixStream},
     runtime::Runtime,
 };
 use tokio_socks::{tcp::socks5::Socks5Stream, Error};
