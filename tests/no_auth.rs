@@ -1,7 +1,6 @@
 mod common;
 
-use crate::common::{runtime, test_bind};
-use common::{connect_unix, test_connect, ECHO_SERVER_ADDR, PROXY_ADDR, UNIX_PROXY_ADDR};
+use common::*;
 use tokio_socks::{
     tcp::socks5::{Socks5Listener, Socks5Stream},
     Result,
