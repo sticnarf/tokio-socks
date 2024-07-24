@@ -1,6 +1,7 @@
 //! Test the tor proxy capabilities
 //!
 //! This example requires a running tor proxy.
+
 #[cfg(not(feature = "tokio"))]
 use async_std::{net::TcpStream, os::unix::net::UnixStream};
 #[cfg(not(feature = "tokio"))]

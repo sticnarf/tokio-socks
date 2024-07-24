@@ -28,7 +28,7 @@ name = "tor"
 required-features = ["tor", "tokio"]
 
 [dependencies]
-futures-util = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["io"] }
 tokio = { version = "1.0", default-features = false, features = [
     "io-util",
     "net",
