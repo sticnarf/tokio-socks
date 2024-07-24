@@ -1,24 +1,25 @@
 use super::*;
-use async_std::{io::copy, net::TcpListener, os::unix::net::UnixStream};
+// use async_std::{io::copy, net::TcpListener, os::unix::net::UnixStream};
+use futures_util::io::copy;
 use futures_util::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use once_cell::sync::OnceCell;
 use std::{
-    future::Future,
     io::{Read, Write},
     net::{SocketAddr, TcpStream as StdTcpStream},
     sync::Mutex,
 };
+use tokio::net::{TcpListener, UnixStream};
+use tokio::runtime::Runtime;
 use tokio_socks::{tcp::socks4::Socks4Listener, tcp::socks5::Socks5Listener, Error, Result};
-
-pub struct Runtime;
+use tokio_util::compat::{Compat, TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 pub async fn echo_server() -> Result<()> {
     let listener = TcpListener::bind(&SocketAddr::from(([0, 0, 0, 0], 10007))).await?;
     loop {
-        let (stream, _) = listener.accept().await?;
-        async_std::task::spawn(async move {
-            let (mut reader, mut writer) = stream.split();
-            copy(&mut reader, &mut writer).await.unwrap();
+        let (mut stream, _) = listener.accept().await?;
+        tokio::spawn(async move {
+            let (reader, writer) = stream.split();
+            copy(&mut reader.compat(), &mut writer.compat_write()).await.unwrap();
         });
     }
 }
@@ -38,7 +39,11 @@ pub async fn test_connect<S: AsyncRead + AsyncWrite + Unpin>(socket: S) -> Resul
 
 pub fn runtime() -> &'static Mutex<Runtime> {
     static RUNTIME: OnceCell<Mutex<Runtime>> = OnceCell::new();
-    RUNTIME.get_or_init(|| Mutex::new(Runtime))
+    RUNTIME.get_or_init(|| {
+        let runtime = Runtime::new().expect("Unable to create runtime");
+        runtime.spawn(async { echo_server().await.expect("Unable to bind") });
+        Mutex::new(runtime)
+    })
 }
 
 pub fn test_bind<S: 'static + AsyncRead + AsyncWrite + Unpin + Send>(listener: Socks5Listener<S>) -> Result<()> {
@@ -57,8 +62,11 @@ pub fn test_bind<S: 'static + AsyncRead + AsyncWrite + Unpin + Send>(listener: S
     Ok(())
 }
 
-pub async fn connect_unix(proxy_addr: &str) -> Result<UnixStream> {
-    UnixStream::connect(proxy_addr).await.map_err(Error::Io)
+pub async fn connect_unix(proxy_addr: &str) -> Result<Compat<UnixStream>> {
+    UnixStream::connect(proxy_addr)
+        .await
+        .map_err(Error::Io)
+        .map(|stream| stream.compat())
 }
 
 pub fn test_bind_socks4<S: 'static + AsyncRead + AsyncWrite + Unpin + Send>(listener: Socks4Listener<S>) -> Result<()> {
@@ -77,12 +85,12 @@ pub fn test_bind_socks4<S: 'static + AsyncRead + AsyncWrite + Unpin + Send>(list
     Ok(())
 }
 
-impl Runtime {
-    pub fn spawn<T: Send + 'static>(&self, future: impl Future<Output = T> + Send + 'static) {
-        async_std::task::spawn(future);
-    }
+// impl Runtime {
+//     pub fn spawn<T: Send + 'static>(&self, future: impl Future<Output = T> + Send + 'static) {
+//         async_std::task::spawn(future);
+//     }
 
-    pub fn block_on<T>(&self, future: impl Future<Output = T>) -> T {
-        async_std::task::block_on(future)
-    }
-}
+//     pub fn block_on<T>(&self, future: impl Future<Output = T>) -> T {
+//         async_std::task::block_on(future)
+//     }
+// }
