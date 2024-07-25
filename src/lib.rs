@@ -51,7 +51,8 @@ impl<'a> ToProxyAddrs for &'a [SocketAddr] {
     type Output = ProxyAddrsStream;
 
     fn to_proxy_addrs(&self) -> Self::Output {
-        ProxyAddrsStream(Some(IoResult::Ok(self.to_vec().into_iter())))
+        let addrs = self.to_vec();
+        ProxyAddrsStream(Some(IoResult::Ok(addrs.into_iter())))
     }
 }
 
@@ -235,8 +236,7 @@ impl IntoTargetAddr<'static> for (String, u16) {
 }
 
 impl<'a, T> IntoTargetAddr<'a> for &'a T
-where
-    T: IntoTargetAddr<'a> + Copy,
+where T: IntoTargetAddr<'a> + Copy
 {
     fn into_target_addr(self) -> Result<TargetAddr<'a>> {
         (*self).into_target_addr()
@@ -284,7 +284,7 @@ mod tests {
     #[test]
     fn converts_socket_addr_ref_to_proxy_addrs() -> Result<()> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
-        let res = to_proxy_addrs(&addr)?;
+        let res = to_proxy_addrs(addr)?;
         assert_eq!(&res[..], &[addr]);
         Ok(())
     }
@@ -301,9 +301,7 @@ mod tests {
     }
 
     fn into_target_addr<'a, T>(t: T) -> Result<TargetAddr<'a>>
-    where
-        T: IntoTargetAddr<'a>,
-    {
+    where T: IntoTargetAddr<'a> {
         t.into_target_addr()
     }
 
@@ -318,7 +316,7 @@ mod tests {
     #[test]
     fn converts_socket_addr_ref_to_target_addr() -> Result<()> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
-        let res = into_target_addr(&addr)?;
+        let res = into_target_addr(addr)?;
         assert_eq!(TargetAddr::Ip(addr), res);
         Ok(())
     }

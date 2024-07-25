@@ -17,8 +17,11 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ matrix.rust }}
-          profile: minimal
+          components: clippy
           override: true
+      - name: Clippy
+        run: |
+          cargo clippy --all-targets --all-features -- -D warnings
       - name: Install 3proxy
         run: |
           cd $HOME

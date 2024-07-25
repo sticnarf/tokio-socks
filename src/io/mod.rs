@@ -3,6 +3,7 @@ mod futures;
 #[cfg(feature = "tokio")]
 mod tokio;
 
+use futures_util::ready;
 use std::{
     future::Future,
     io::{Error, ErrorKind},
@@ -10,8 +11,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-
-use futures_util::ready;
 
 pub struct Compat<S>(S);
 
@@ -29,19 +28,15 @@ pub trait AsyncSocket {
 
 pub(crate) trait AsyncSocketExt {
     fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> ReadExact<'a, Self>
-    where
-        Self: Sized;
+    where Self: Sized;
 
     fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> WriteAll<'a, Self>
-    where
-        Self: Sized;
+    where Self: Sized;
 }
 
 impl<S: AsyncSocket> AsyncSocketExt for S {
     fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> ReadExact<'a, Self>
-    where
-        Self: Sized,
-    {
+    where Self: Sized {
         let capacity = buf.len();
         ReadExact {
             reader: self,
@@ -51,9 +46,7 @@ impl<S: AsyncSocket> AsyncSocketExt for S {
     }
 
     fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> WriteAll<'a, Self>
-    where
-        Self: Sized,
-    {
+    where Self: Sized {
         WriteAll { writer: self, buf }
     }
 }
@@ -88,7 +81,7 @@ pub(crate) struct WriteAll<'a, W> {
     buf: &'a [u8],
 }
 
-impl<'a, W: AsyncSocket + Unpin> Future for WriteAll<'_, W> {
+impl<W: AsyncSocket + Unpin> Future for WriteAll<'_, W> {
     type Output = Result<(), Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

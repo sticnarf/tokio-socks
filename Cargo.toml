@@ -21,12 +21,16 @@ tor = []
 futures-io = ["dep:futures-io"]
 
 [[example]]
+name = "chainproxy"
+required-features = ["tokio"]
+
+[[example]]
 name = "socket"
-required-features = ["tor"]
+required-features = ["tokio", "tor"]
 
 [[example]]
 name = "tor"
-required-features = ["tor"]
+required-features = ["tokio", "tor"]
 
 [dependencies]
 futures-util = { version = "0.3", default-features = false }
