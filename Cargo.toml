@@ -16,7 +16,7 @@ edition = "2018"
 travis-ci = { repository = "sticnarf/tokio-socks" }
 
 [features]
-default = ["tokio", "futures-io"]
+default = ["tokio"]
 tor = []
 futures-io = ["dep:futures-io"]
 
