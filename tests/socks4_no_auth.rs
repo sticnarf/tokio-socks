@@ -1,14 +1,12 @@
 mod common;
 
-use crate::common::runtime;
-use common::{
-    connect_unix, test_bind_socks4, test_connect, ECHO_SERVER_ADDR, SOCKS4_PROXY_ADDR, UNIX_SOCKS4_PROXY_ADDR,
-};
+use common::*;
 use tokio_socks::{
     tcp::socks4::{Socks4Listener, Socks4Stream},
     Result,
 };
 
+#[cfg(feature = "tokio")]
 #[test]
 fn connect_no_auth() -> Result<()> {
     let runtime = runtime().lock().unwrap();
@@ -16,6 +14,7 @@ fn connect_no_auth() -> Result<()> {
     runtime.block_on(test_connect(conn))
 }
 
+#[cfg(feature = "tokio")]
 #[test]
 fn bind_no_auth() -> Result<()> {
     let bind = {
@@ -25,6 +24,7 @@ fn bind_no_auth() -> Result<()> {
     test_bind_socks4(bind)
 }
 
+#[cfg(feature = "tokio")]
 #[test]
 fn connect_with_socket_no_auth() -> Result<()> {
     let runtime = runtime().lock().unwrap();
@@ -34,6 +34,7 @@ fn connect_with_socket_no_auth() -> Result<()> {
     runtime.block_on(test_connect(conn))
 }
 
+#[cfg(feature = "tokio")]
 #[test]
 fn bind_with_socket_no_auth() -> Result<()> {
     let bind = {
@@ -42,4 +43,29 @@ fn bind_with_socket_no_auth() -> Result<()> {
         runtime.block_on(Socks4Listener::bind_with_socket(socket, ECHO_SERVER_ADDR))
     }?;
     test_bind_socks4(bind)
+}
+
+#[cfg(feature = "futures-io")]
+#[test]
+fn connect_with_socket_no_auth_futures_io() -> Result<()> {
+    let runtime = futures_utils::runtime().lock().unwrap();
+    let socket = runtime
+        .block_on(futures_utils::connect_unix(UNIX_SOCKS4_PROXY_ADDR))?
+        .compat();
+    println!("socket connected");
+    let conn = runtime.block_on(Socks4Stream::connect_with_socket(socket, ECHO_SERVER_ADDR))?;
+    runtime.block_on(futures_utils::test_connect(conn))
+}
+
+#[cfg(feature = "futures-io")]
+#[test]
+fn bind_with_socket_no_auth_futures_io() -> Result<()> {
+    let bind = {
+        let runtime = futures_utils::runtime().lock().unwrap();
+        let socket = runtime
+            .block_on(futures_utils::connect_unix(UNIX_SOCKS4_PROXY_ADDR))?
+            .compat();
+        runtime.block_on(Socks4Listener::bind_with_socket(socket, ECHO_SERVER_ADDR))
+    }?;
+    futures_utils::test_bind_socks4(bind)
 }

@@ -1,12 +1,12 @@
 mod common;
 
-use crate::common::{runtime, test_bind};
-use common::{connect_unix, test_connect, ECHO_SERVER_ADDR, PROXY_ADDR, UNIX_PROXY_ADDR};
+use common::*;
 use tokio_socks::{
     tcp::socks5::{Socks5Listener, Socks5Stream},
     Result,
 };
 
+#[cfg(feature = "tokio")]
 #[test]
 fn connect_no_auth() -> Result<()> {
     let runtime = runtime().lock().unwrap();
@@ -14,6 +14,7 @@ fn connect_no_auth() -> Result<()> {
     runtime.block_on(test_connect(conn))
 }
 
+#[cfg(feature = "tokio")]
 #[test]
 fn bind_no_auth() -> Result<()> {
     let bind = {
@@ -23,6 +24,7 @@ fn bind_no_auth() -> Result<()> {
     test_bind(bind)
 }
 
+#[cfg(feature = "tokio")]
 #[test]
 fn connect_with_socket_no_auth() -> Result<()> {
     let runtime = runtime().lock().unwrap();
@@ -31,6 +33,7 @@ fn connect_with_socket_no_auth() -> Result<()> {
     runtime.block_on(test_connect(conn))
 }
 
+#[cfg(feature = "tokio")]
 #[test]
 fn bind_with_socket_no_auth() -> Result<()> {
     let bind = {
@@ -39,4 +42,24 @@ fn bind_with_socket_no_auth() -> Result<()> {
         runtime.block_on(Socks5Listener::bind_with_socket(socket, ECHO_SERVER_ADDR))
     }?;
     test_bind(bind)
+}
+
+#[cfg(feature = "futures-io")]
+#[test]
+fn connect_with_socket_no_auth_futures_io() -> Result<()> {
+    let runtime = futures_utils::runtime().lock().unwrap();
+    let socket = runtime.block_on(futures_utils::connect_unix(UNIX_PROXY_ADDR))?.compat();
+    let conn = runtime.block_on(Socks5Stream::connect_with_socket(socket, ECHO_SERVER_ADDR))?;
+    runtime.block_on(futures_utils::test_connect(conn))
+}
+
+#[cfg(feature = "futures-io")]
+#[test]
+fn bind_with_socket_no_auth_futures_io() -> Result<()> {
+    let bind = {
+        let runtime = futures_utils::runtime().lock().unwrap();
+        let socket = runtime.block_on(futures_utils::connect_unix(UNIX_PROXY_ADDR))?.compat();
+        runtime.block_on(Socks5Listener::bind_with_socket(socket, ECHO_SERVER_ADDR))
+    }?;
+    futures_utils::test_bind(bind)
 }
