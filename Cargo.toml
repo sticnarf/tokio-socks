@@ -16,7 +16,9 @@ edition = "2018"
 travis-ci = { repository = "sticnarf/tokio-socks" }
 
 [features]
+default = ["tokio"]
 tor = []
+futures-io = ["dep:futures-io"]
 
 [[example]]
 name = "socket"
@@ -28,7 +30,8 @@ required-features = ["tor"]
 
 [dependencies]
 futures-util = { version = "0.3", default-features = false }
-tokio = { version = "1.0", features = ["io-util", "net"] }
+futures-io = { version = "0.3", optional = true }
+tokio = { version = "1.0", features = ["io-util", "net"], optional = true }
 either = "1"
 thiserror = "1.0"
 
