@@ -63,7 +63,7 @@ fn bind_with_socket_long_username_password() -> Result<()> {
 #[cfg(feature = "futures-io")]
 #[test]
 fn connect_with_socket_long_username_password_futures_io() -> Result<()> {
-    let runtime = runtime().lock().unwrap();
+    let runtime = futures_utils::runtime().lock().unwrap();
     let socket = Compat::new(runtime.block_on(futures_utils::connect_unix(UNIX_PROXY_ADDR))?);
     let conn = runtime.block_on(Socks5Stream::connect_with_password_and_socket(
         socket, ECHO_SERVER_ADDR, "mylonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglogin",
@@ -76,7 +76,7 @@ fn connect_with_socket_long_username_password_futures_io() -> Result<()> {
 #[test]
 fn bind_with_socket_long_username_password_futures_io() -> Result<()> {
     let bind = {
-        let runtime = runtime().lock().unwrap();
+        let runtime = futures_utils::runtime().lock().unwrap();
         let socket = Compat::new(runtime.block_on(futures_utils::connect_unix(UNIX_PROXY_ADDR))?);
         runtime.block_on(Socks5Listener::bind_with_password_and_socket(
             socket,
