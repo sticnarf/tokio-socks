@@ -1,8 +1,10 @@
+//! Asynchronous I/O abstractions for sockets.
 #[cfg(feature = "futures-io")]
 mod futures;
 #[cfg(feature = "tokio")]
 mod tokio;
 
+use futures_util::ready;
 use std::{
     future::Future,
     io::{Error, ErrorKind},
@@ -11,16 +13,15 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures_util::ready;
+#[cfg(feature = "futures-io")]
+pub use futures::{Compat, FuturesIoCompatExt};
 
-pub struct Compat<S>(S);
-
-impl<S> Compat<S> {
-    pub fn new(inner: S) -> Self {
-        Compat(inner)
-    }
-}
-
+/// A trait for asynchronous socket I/O.
+///
+/// Any type that implements tokio's `AsyncRead` and `AsyncWrite` traits
+/// has implemented `AsyncSocket` trait.
+///
+/// Use `FuturesIoCompatExt` to wrap `futures-io` types as `AsyncSocket` types.
 pub trait AsyncSocket {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, Error>>;
 
@@ -88,7 +89,7 @@ pub(crate) struct WriteAll<'a, W> {
     buf: &'a [u8],
 }
 
-impl<'a, W: AsyncSocket + Unpin> Future for WriteAll<'_, W> {
+impl<W: AsyncSocket + Unpin> Future for WriteAll<'_, W> {
     type Output = Result<(), Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
