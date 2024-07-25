@@ -8,6 +8,7 @@ use std::{
     future::Future,
     io::{Error, ErrorKind},
     mem,
+    ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
 };
@@ -17,6 +18,24 @@ pub struct Compat<S>(S);
 impl<S> Compat<S> {
     pub fn new(inner: S) -> Self {
         Compat(inner)
+    }
+
+    pub fn into_inner(self) -> S {
+        self.0
+    }
+}
+
+impl<S> Deref for Compat<S> {
+    type Target = S;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<S> DerefMut for Compat<S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
