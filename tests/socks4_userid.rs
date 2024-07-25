@@ -1,7 +1,7 @@
 mod common;
 
 use common::*;
-use tokio_socks::{io::Compat, tcp::socks4::*, Result};
+use tokio_socks::{tcp::socks4::*, Result};
 
 #[cfg(feature = "tokio")]
 #[test]
@@ -57,10 +57,10 @@ fn bind_with_socket_userid() -> Result<()> {
     test_bind_socks4(bind)
 }
 
-#[cfg(feature = "tokio")]
 #[cfg(feature = "futures-io")]
 #[test]
 fn connect_with_socket_userid_futures_io() -> Result<()> {
+    use tokio_socks::io::Compat;
     let runtime = futures_utils::runtime().lock().unwrap();
     let socket = Compat::new(runtime.block_on(futures_utils::connect_unix(UNIX_SOCKS4_PROXY_ADDR))?);
     let conn = runtime.block_on(Socks4Stream::connect_with_userid_and_socket(
@@ -71,10 +71,10 @@ fn connect_with_socket_userid_futures_io() -> Result<()> {
     runtime.block_on(futures_utils::test_connect(conn))
 }
 
-#[cfg(feature = "tokio")]
 #[cfg(feature = "futures-io")]
 #[test]
 fn bind_with_socket_userid_futures_io() -> Result<()> {
+    use tokio_socks::io::Compat;
     let bind = {
         let runtime = futures_utils::runtime().lock().unwrap();
         let socket = Compat::new(runtime.block_on(futures_utils::connect_unix(UNIX_SOCKS4_PROXY_ADDR))?);

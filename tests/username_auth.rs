@@ -2,7 +2,6 @@ mod common;
 
 use common::*;
 use tokio_socks::{
-    io::Compat,
     tcp::socks5::{Socks5Listener, Socks5Stream},
     Result,
 };
@@ -65,10 +64,10 @@ fn bind_with_socket_username_auth() -> Result<()> {
     test_bind(bind)
 }
 
-#[cfg(feature = "tokio")]
 #[cfg(feature = "futures-io")]
 #[test]
 fn connect_with_socket_username_auth_futures_io() -> Result<()> {
+    use tokio_socks::io::Compat;
     let runtime = futures_utils::runtime().lock().unwrap();
     let socket = Compat::new(runtime.block_on(futures_utils::connect_unix(UNIX_PROXY_ADDR))?);
     let conn = runtime.block_on(Socks5Stream::connect_with_password_and_socket(
@@ -80,10 +79,10 @@ fn connect_with_socket_username_auth_futures_io() -> Result<()> {
     runtime.block_on(futures_utils::test_connect(conn))
 }
 
-#[cfg(feature = "tokio")]
 #[cfg(feature = "futures-io")]
 #[test]
 fn bind_with_socket_username_auth_futures_io() -> Result<()> {
+    use tokio_socks::io::Compat;
     let bind = {
         let runtime = futures_utils::runtime().lock().unwrap();
         let socket = Compat::new(runtime.block_on(futures_utils::connect_unix(UNIX_PROXY_ADDR))?);

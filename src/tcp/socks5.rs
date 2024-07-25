@@ -5,7 +5,6 @@ use crate::{
     IntoTargetAddr,
     Result,
     TargetAddr,
-    ToProxyAddrs,
 };
 
 use std::{
@@ -18,6 +17,9 @@ use std::{
 };
 
 use futures_util::stream::{self, Fuse, Stream, StreamExt};
+
+#[cfg(feature = "tokio")]
+use crate::ToProxyAddrs;
 #[cfg(feature = "tokio")]
 use tokio::net::TcpStream;
 
@@ -264,6 +266,7 @@ where S: AsyncSocket + Unpin
 pub struct SocksConnector<'a, 't, S> {
     auth: Authentication<'a>,
     command: Command,
+    #[allow(dead_code)]
     proxy: Fuse<S>,
     target: TargetAddr<'t>,
     buf: [u8; 513],

@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-#[cfg(feature = "tokio")]
 #[cfg(feature = "futures-io")]
 pub mod futures_utils;
 #[cfg(feature = "tokio")]

@@ -4,9 +4,9 @@ use crate::{
     IntoTargetAddr,
     Result,
     TargetAddr,
-    ToProxyAddrs,
 };
 
+use futures_util::stream::{self, Fuse, Stream, StreamExt};
 use std::{
     borrow::Borrow,
     io,
@@ -16,7 +16,8 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures_util::stream::{self, Fuse, Stream, StreamExt};
+#[cfg(feature = "tokio")]
+use crate::ToProxyAddrs;
 #[cfg(feature = "tokio")]
 use tokio::net::TcpStream;
 
@@ -195,6 +196,7 @@ where S: AsyncSocket + Unpin
 pub struct Socks4Connector<'a, 't, S> {
     user_id: Option<&'a str>,
     command: CommandV4,
+    #[allow(dead_code)]
     proxy: Fuse<S>,
     target: TargetAddr<'t>,
     buf: [u8; 513],

@@ -1,9 +1,7 @@
 mod common;
 
-use crate::common::runtime;
 use common::*;
 use tokio_socks::{
-    io::Compat,
     tcp::socks4::{Socks4Listener, Socks4Stream},
     Result,
 };
@@ -47,10 +45,10 @@ fn bind_with_socket_no_auth() -> Result<()> {
     test_bind_socks4(bind)
 }
 
-#[cfg(feature = "tokio")]
 #[cfg(feature = "futures-io")]
 #[test]
 fn connect_with_socket_no_auth_futures_io() -> Result<()> {
+    use tokio_socks::io::Compat;
     let runtime = futures_utils::runtime().lock().unwrap();
     let socket = Compat::new(runtime.block_on(futures_utils::connect_unix(UNIX_SOCKS4_PROXY_ADDR))?);
     println!("socket connected");
@@ -58,10 +56,10 @@ fn connect_with_socket_no_auth_futures_io() -> Result<()> {
     runtime.block_on(futures_utils::test_connect(conn))
 }
 
-#[cfg(feature = "tokio")]
 #[cfg(feature = "futures-io")]
 #[test]
 fn bind_with_socket_no_auth_futures_io() -> Result<()> {
+    use tokio_socks::io::Compat;
     let bind = {
         let runtime = futures_utils::runtime().lock().unwrap();
         let socket = Compat::new(runtime.block_on(futures_utils::connect_unix(UNIX_SOCKS4_PROXY_ADDR))?);
