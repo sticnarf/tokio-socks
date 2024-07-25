@@ -17,6 +17,15 @@ Asynchronous SOCKS proxy support for Rust.
 - [X] Chain proxies ([see example](examples/chainproxy.rs))
 - [X] SOCKS4
 
+## Compatibility with Other Async Runtimes
+
+By default use `tokio` feature, as the crate name suggests.
+
+Compatibility with `futures-io` can be enabled by enabling the `futures-io` feature
+and `use tokio_socks::io::FuturesIoCompatExt`.
+
+When using `default-features = false` with `futures-io`, tokio is not pulled in as a dependency.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](/LICENSE) file for details.
