@@ -59,13 +59,11 @@ impl<S> DerefMut for Compat<S> {
 /// ```
 pub trait FuturesIoCompatExt {
     fn compat(self) -> Compat<Self>
-    where
-        Self: Sized;
+    where Self: Sized;
 }
 
 impl<S> FuturesIoCompatExt for S
-where
-    S: AsyncRead + AsyncWrite + Unpin,
+where S: AsyncRead + AsyncWrite + Unpin
 {
     fn compat(self) -> Compat<Self> {
         Compat::new(self)
@@ -73,8 +71,7 @@ where
 }
 
 impl<S> AsyncSocket for Compat<S>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
+where S: AsyncRead + AsyncWrite + Unpin
 {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<IoResult<usize>> {
         AsyncRead::poll_read(Pin::new(self.get_mut().deref_mut()), cx, buf)
@@ -86,8 +83,7 @@ where
 }
 
 impl<S> AsyncRead for Compat<S>
-where
-    S: AsyncRead + Unpin,
+where S: AsyncRead + Unpin
 {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<IoResult<usize>> {
         AsyncRead::poll_read(Pin::new(self.get_mut().deref_mut()), cx, buf)
@@ -95,8 +91,7 @@ where
 }
 
 impl<S> AsyncWrite for Compat<S>
-where
-    S: AsyncWrite + Unpin,
+where S: AsyncWrite + Unpin
 {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IoResult<usize>> {
         AsyncWrite::poll_write(Pin::new(self.get_mut().deref_mut()), cx, buf)

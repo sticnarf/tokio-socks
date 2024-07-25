@@ -30,19 +30,15 @@ pub trait AsyncSocket {
 
 pub(crate) trait AsyncSocketExt {
     fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> ReadExact<'a, Self>
-    where
-        Self: Sized;
+    where Self: Sized;
 
     fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> WriteAll<'a, Self>
-    where
-        Self: Sized;
+    where Self: Sized;
 }
 
 impl<S: AsyncSocket> AsyncSocketExt for S {
     fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> ReadExact<'a, Self>
-    where
-        Self: Sized,
-    {
+    where Self: Sized {
         let capacity = buf.len();
         ReadExact {
             reader: self,
@@ -52,9 +48,7 @@ impl<S: AsyncSocket> AsyncSocketExt for S {
     }
 
     fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> WriteAll<'a, Self>
-    where
-        Self: Sized,
-    {
+    where Self: Sized {
         WriteAll { writer: self, buf }
     }
 }

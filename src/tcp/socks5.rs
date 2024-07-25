@@ -1,6 +1,10 @@
 use crate::{
     io::{AsyncSocket, AsyncSocketExt},
-    Authentication, Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs,
+    Authentication,
+    Error,
+    IntoTargetAddr,
+    Result,
+    TargetAddr,
 };
 
 use std::{
@@ -13,6 +17,9 @@ use std::{
 };
 
 use futures_util::stream::{self, Fuse, Stream, StreamExt};
+
+#[cfg(feature = "tokio")]
+use crate::ToProxyAddrs;
 #[cfg(feature = "tokio")]
 use tokio::net::TcpStream;
 
@@ -143,8 +150,7 @@ impl Socks5Stream<TcpStream> {
 }
 
 impl<S> Socks5Stream<S>
-where
-    S: AsyncSocket + Unpin,
+where S: AsyncSocket + Unpin
 {
     /// Connects to a target server through a SOCKS5 proxy given a socket to it.
     ///
@@ -153,9 +159,7 @@ where
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
     pub async fn connect_with_socket<'t, T>(socket: S, target: T) -> Result<Socks5Stream<S>>
-    where
-        T: IntoTargetAddr<'t>,
-    {
+    where T: IntoTargetAddr<'t> {
         Self::execute_command_with_socket(socket, target, Authentication::None, Command::Connect).await
     }
 
@@ -184,15 +188,15 @@ where
         .await
     }
 
-    fn validate_auth<'a>(auth: &Authentication<'a>) -> Result<()> {
+    fn validate_auth(auth: &Authentication<'_>) -> Result<()> {
         match auth {
             Authentication::Password { username, password } => {
                 let username_len = username.as_bytes().len();
-                if username_len < 1 || username_len > 255 {
+                if !(1..=255).contains(&username_len) {
                     Err(Error::InvalidAuthValues("username length should between 1 to 255"))?
                 }
                 let password_len = password.as_bytes().len();
-                if password_len < 1 || password_len > 255 {
+                if !(1..=255).contains(&password_len) {
                     Err(Error::InvalidAuthValues("password length should between 1 to 255"))?
                 }
             },
@@ -205,9 +209,7 @@ where
     /// Resolve the domain name to an ip using special Tor Resolve command, by
     /// connecting to a Tor compatible proxy given a socket to it.
     pub async fn tor_resolve_with_socket<'t, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
-    where
-        T: IntoTargetAddr<'t>,
-    {
+    where T: IntoTargetAddr<'t> {
         let sock = Self::execute_command_with_socket(socket, target, Authentication::None, Command::TorResolve).await?;
 
         Ok(sock.target_addr().to_owned())
@@ -218,9 +220,7 @@ where
     /// PTR command, by connecting to a Tor compatible proxy given a socket
     /// to it.
     pub async fn tor_resolve_ptr_with_socket<'t, T>(socket: S, target: T) -> Result<TargetAddr<'static>>
-    where
-        T: IntoTargetAddr<'t>,
-    {
+    where T: IntoTargetAddr<'t> {
         let sock =
             Self::execute_command_with_socket(socket, target, Authentication::None, Command::TorResolvePtr).await?;
 
@@ -266,6 +266,7 @@ where
 pub struct SocksConnector<'a, 't, S> {
     auth: Authentication<'a>,
     command: Command,
+    #[allow(dead_code)]
     proxy: Fuse<S>,
     target: TargetAddr<'t>,
     buf: [u8; 513],
@@ -274,8 +275,7 @@ pub struct SocksConnector<'a, 't, S> {
 }
 
 impl<'a, 't, S> SocksConnector<'a, 't, S>
-where
-    S: Stream<Item = Result<SocketAddr>> + Unpin,
+where S: Stream<Item = Result<SocketAddr>> + Unpin
 {
     fn new(auth: Authentication<'a>, command: Command, proxy: Fuse<S>, target: TargetAddr<'t>) -> Self {
         SocksConnector {
@@ -498,7 +498,7 @@ where
             },
             // Domain
             0x03 => {
-                let domain_bytes = (&self.buf[5..(self.len - 2)]).to_vec();
+                let domain_bytes = self.buf[5..(self.len - 2)].to_vec();
                 let domain = String::from_utf8(domain_bytes)
                     .map_err(|_| Error::InvalidTargetAddress("not a valid UTF-8 string"))?;
                 let port = u16::from_be_bytes([self.buf[self.len - 2], self.buf[self.len - 1]]);
@@ -586,8 +586,7 @@ impl Socks5Listener<TcpStream> {
 }
 
 impl<S> Socks5Listener<S>
-where
-    S: AsyncSocket + Unpin,
+where S: AsyncSocket + Unpin
 {
     /// Initiates a BIND request to the specified proxy using the given socket
     /// to it.
@@ -600,9 +599,7 @@ where
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
     pub async fn bind_with_socket<'t, T>(socket: S, target: T) -> Result<Socks5Listener<S>>
-    where
-        T: IntoTargetAddr<'t>,
-    {
+    where T: IntoTargetAddr<'t> {
         Self::bind_with_auth_and_socket(Authentication::None, socket, target).await
     }
 
@@ -678,8 +675,7 @@ where
 
 #[cfg(feature = "tokio")]
 impl<T> tokio::io::AsyncRead for Socks5Stream<T>
-where
-    T: tokio::io::AsyncRead + Unpin,
+where T: tokio::io::AsyncRead + Unpin
 {
     fn poll_read(
         mut self: Pin<&mut Self>,
@@ -692,8 +688,7 @@ where
 
 #[cfg(feature = "tokio")]
 impl<T> tokio::io::AsyncWrite for Socks5Stream<T>
-where
-    T: tokio::io::AsyncWrite + Unpin,
+where T: tokio::io::AsyncWrite + Unpin
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         tokio::io::AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
@@ -710,8 +705,7 @@ where
 
 #[cfg(feature = "futures-io")]
 impl<T> futures_io::AsyncRead for Socks5Stream<T>
-where
-    T: futures_io::AsyncRead + Unpin,
+where T: futures_io::AsyncRead + Unpin
 {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         futures_io::AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
@@ -719,10 +713,8 @@ where
 }
 
 #[cfg(feature = "futures-io")]
-
 impl<T> futures_io::AsyncWrite for Socks5Stream<T>
-where
-    T: futures_io::AsyncWrite + Unpin,
+where T: futures_io::AsyncWrite + Unpin
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         futures_io::AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
