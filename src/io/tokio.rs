@@ -1,3 +1,5 @@
+//! AsyncSocket trait implementation for tokio's AsyncRead + AsyncWrite
+//! traits.
 use super::AsyncSocket;
 use futures_util::ready;
 use std::{

@@ -1,3 +1,4 @@
+//! Asynchronous I/O abstractions for sockets.
 #[cfg(feature = "futures-io")]
 mod futures;
 #[cfg(feature = "tokio")]
@@ -15,6 +16,12 @@ use std::{
 #[cfg(feature = "futures-io")]
 pub use futures::{Compat, FuturesIoCompatExt};
 
+/// A trait for asynchronous socket I/O.
+///
+/// Any type that implements tokio's `AsyncRead` and `AsyncWrite` traits
+/// has implemented `AsyncSocket` trait.
+///
+/// Use `FuturesIoCompatExt` to wrap `futures-io` types.
 pub trait AsyncSocket {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, Error>>;
 

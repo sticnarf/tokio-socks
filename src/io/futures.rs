@@ -1,3 +1,8 @@
+//! Compat layer for `futures-io` types.
+//!
+//! This module provides a compatibility layer for using `futures-io` types with
+//! `async-socks5`. AsyncSocket is implemented for Compat<S> where S is an
+//! AsyncRead + AsyncWrite + Unpin type from `futures-io`.
 use super::AsyncSocket;
 use futures_io::{AsyncRead, AsyncWrite};
 use std::{
@@ -7,13 +12,17 @@ use std::{
     task::{Context, Poll},
 };
 
+/// A compatibility layer for using `futures-io` types with `async-socks5`.
+///
+/// Use `FuturesIoCompatExt` to convert `futures-io` types to `Compat` types.
 pub struct Compat<S>(S);
 
 impl<S> Compat<S> {
-    pub fn new(inner: S) -> Self {
+    pub(crate) fn new(inner: S) -> Self {
         Compat(inner)
     }
 
+    /// Unwraps this Compat, returning the inner value.
     pub fn into_inner(self) -> S {
         self.0
     }
@@ -33,6 +42,21 @@ impl<S> DerefMut for Compat<S> {
     }
 }
 
+/// Import this trait to use socks with `futures-io` compatible runtime.
+///
+/// Example:
+/// ```no_run
+/// use async_std::os::unix::net::UnixStream;
+/// use tokio_socks::{io::FuturesIoCompatExt as _, tcp::Socks5Stream};
+///
+/// let socket = UnixStream::connect(proxy_addr) // Compat<UnixStream>
+///     .await
+///     .map_err(Error::Io)?
+///     .compat();
+/// let conn =
+///     Socks5Stream::connect_with_password_and_socket(socket, target, username, pswd).await?;
+/// // Socks5Stream has implemented futures-io AsyncRead + AsyncWrite.
+/// ```
 pub trait FuturesIoCompatExt {
     fn compat(self) -> Compat<Self>
     where Self: Sized;
