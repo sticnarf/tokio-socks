@@ -14,7 +14,7 @@ use std::{
 
 /// A compatibility layer for using `futures-io` types with `async-socks5`.
 ///
-/// Use `FuturesIoCompatExt` to convert `futures-io` types to `Compat` types.
+/// See `FuturesIoCompatExt` trait for details.
 pub struct Compat<S>(S);
 
 impl<S> Compat<S> {
@@ -49,10 +49,10 @@ impl<S> DerefMut for Compat<S> {
 /// use async_std::os::unix::net::UnixStream;
 /// use tokio_socks::{io::FuturesIoCompatExt as _, tcp::Socks5Stream};
 ///
-/// let socket = UnixStream::connect(proxy_addr) // Compat<UnixStream>
+/// let socket = UnixStream::connect(proxy_addr)
 ///     .await
 ///     .map_err(Error::Io)?
-///     .compat();
+///     .compat(); // Compat<UnixStream>
 /// let conn =
 ///     Socks5Stream::connect_with_password_and_socket(socket, target, username, pswd).await?;
 /// // Socks5Stream has implemented futures-io AsyncRead + AsyncWrite.

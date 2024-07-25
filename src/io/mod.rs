@@ -21,7 +21,7 @@ pub use futures::{Compat, FuturesIoCompatExt};
 /// Any type that implements tokio's `AsyncRead` and `AsyncWrite` traits
 /// has implemented `AsyncSocket` trait.
 ///
-/// Use `FuturesIoCompatExt` to wrap `futures-io` types.
+/// Use `FuturesIoCompatExt` to wrap `futures-io` types as `AsyncSocket` types.
 pub trait AsyncSocket {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize, Error>>;
 
