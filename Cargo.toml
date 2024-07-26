@@ -12,9 +12,6 @@ version = "0.5.2"
 authors = ["Yilin Chen <sticnarf@gmail.com>"]
 edition = "2018"
 
-[badges]
-travis-ci = { repository = "sticnarf/tokio-socks" }
-
 [features]
 default = ["tokio"]
 tor = []
