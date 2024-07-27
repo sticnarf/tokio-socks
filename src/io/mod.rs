@@ -1,6 +1,5 @@
 //! Asynchronous I/O abstractions for sockets.
-#[cfg(feature = "futures-io")]
-mod futures;
+
 #[cfg(feature = "tokio")]
 mod tokio;
 
@@ -14,7 +13,9 @@ use std::{
 };
 
 #[cfg(feature = "futures-io")]
-pub use futures::{Compat, FuturesIoCompatExt};
+mod compat;
+#[cfg(feature = "futures-io")]
+pub use compat::Compat;
 
 /// A trait for asynchronous socket I/O.
 ///
