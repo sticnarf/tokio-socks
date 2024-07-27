@@ -1,6 +1,7 @@
 # 0.5.2
 
 * Added SOCKS4 support `bind` and `connect`.
+* `tokio` becomes an optional dependency and [`futures-io`](https://github.com/rust-lang/futures-rs/tree/0.3.30/futures-io) traits are supported through the `futures-io` feature.
 
 # 0.5.1
 

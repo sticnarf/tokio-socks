@@ -19,12 +19,11 @@ Asynchronous SOCKS proxy support for Rust.
 
 ## Compatibility with Other Async Runtimes
 
-By default use `tokio` feature, as the crate name suggests.
+By default, the `tokio` feature is enabled, as the crate name suggests.
 
-Compatibility with `futures-io` can be enabled by enabling the `futures-io` feature
-and `use tokio_socks::io::FuturesIoCompatExt`.
+Users can opt out `tokio` by setting `default-features = false`. The `*_with_socket` functions accept types implementing the `AsyncSocket` trait.
 
-When using `default-features = false` with `futures-io`, tokio is not pulled in as a dependency.
+The crate provides `io::Compat` that implements `AsyncSocket` for `futures-io` types (requiring the `futures-io` feature).
 
 ## License
 
