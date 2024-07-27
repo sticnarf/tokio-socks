@@ -1,11 +1,13 @@
-use super::Compat;
-use crate::io::AsyncSocket;
-use futures_io::{AsyncRead, AsyncWrite};
 use std::{
     io::Result as IoResult,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use futures_io::{AsyncRead, AsyncWrite};
+
+use super::Compat;
+use crate::io::AsyncSocket;
 
 impl<S> AsyncSocket for Compat<S>
 where S: AsyncRead + AsyncWrite + Unpin

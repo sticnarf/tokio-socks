@@ -3,7 +3,6 @@
 #[cfg(feature = "tokio")]
 mod tokio;
 
-use futures_util::ready;
 use std::{
     future::Future,
     io::{Error, ErrorKind},
@@ -11,6 +10,8 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+
+use futures_util::ready;
 
 #[cfg(feature = "futures-io")]
 mod compat;

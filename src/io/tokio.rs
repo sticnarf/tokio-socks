@@ -1,13 +1,15 @@
 //! AsyncSocket trait implementation for tokio's AsyncRead + AsyncWrite
 //! traits.
-use super::AsyncSocket;
-use futures_util::ready;
 use std::{
     io::Result as IoResult,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use futures_util::ready;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+
+use super::AsyncSocket;
 
 impl<S> AsyncSocket for S
 where S: AsyncRead + AsyncWrite
