@@ -4,8 +4,6 @@ pub mod futures_utils;
 #[cfg(feature = "tokio")]
 pub mod tokio_utils;
 
-#[cfg(feature = "futures-io")]
-pub use tokio_socks::io::FuturesIoCompatExt as _;
 #[cfg(feature = "tokio")]
 pub use tokio_utils::*;
 

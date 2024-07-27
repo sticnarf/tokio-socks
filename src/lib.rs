@@ -14,9 +14,6 @@ use std::{
 
 pub use error::Error;
 
-#[cfg(not(any(feature = "tokio", feature = "futures-io")))]
-compile_error!("At least one of the features `tokio` or `futures-io` must be enabled.");
-
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// A trait for objects which can be converted or resolved to one or more
