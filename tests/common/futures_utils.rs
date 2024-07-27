@@ -1,7 +1,7 @@
 use super::*;
-use async_std::{net::TcpListener, os::unix::net::UnixStream};
 use futures_util::{io::copy, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use once_cell::sync::OnceCell;
+use smol::net::{unix::UnixStream, TcpListener};
 use std::{
     future::Future,
     io::{Read, Write},
@@ -19,10 +19,11 @@ pub async fn echo_server() -> Result<()> {
     let listener = TcpListener::bind(&SocketAddr::from(([0, 0, 0, 0], 10007))).await?;
     loop {
         let (stream, _) = listener.accept().await?;
-        async_std::task::spawn(async move {
+        smol::spawn(async move {
             let (mut reader, mut writer) = stream.split();
             copy(&mut reader, &mut writer).await.unwrap();
-        });
+        })
+        .detach();
     }
 }
 
@@ -69,19 +70,19 @@ impl Runtime {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        async_std::task::spawn(future);
+        smol::spawn(future).detach();
     }
 
     pub fn block_on<F, T>(&self, future: F) -> T
     where F: Future<Output = T> {
-        async_std::task::block_on(future)
+        smol::block_on(future)
     }
 }
 
 pub fn runtime() -> &'static Mutex<Runtime> {
     static RUNTIME: OnceCell<Mutex<Runtime>> = OnceCell::new();
     RUNTIME.get_or_init(|| {
-        async_std::task::spawn(async { echo_server().await.expect("Unable to bind") });
+        smol::spawn(async { echo_server().await.expect("Unable to bind") }).detach();
         Mutex::new(Runtime)
     })
 }
