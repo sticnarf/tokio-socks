@@ -1,12 +1,3 @@
-use crate::{
-    io::{AsyncSocket, AsyncSocketExt},
-    Authentication,
-    Error,
-    IntoTargetAddr,
-    Result,
-    TargetAddr,
-};
-
 use std::{
     borrow::Borrow,
     io,
@@ -17,11 +8,19 @@ use std::{
 };
 
 use futures_util::stream::{self, Fuse, Stream, StreamExt};
+#[cfg(feature = "tokio")]
+use tokio::net::TcpStream;
 
 #[cfg(feature = "tokio")]
 use crate::ToProxyAddrs;
-#[cfg(feature = "tokio")]
-use tokio::net::TcpStream;
+use crate::{
+    io::{AsyncSocket, AsyncSocketExt},
+    Authentication,
+    Error,
+    IntoTargetAddr,
+    Result,
+    TargetAddr,
+};
 
 #[repr(u8)]
 #[derive(Clone, Copy)]

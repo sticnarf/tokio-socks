@@ -1,10 +1,10 @@
-use super::*;
-use once_cell::sync::OnceCell;
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream as StdTcpStream},
     sync::Mutex,
 };
+
+use once_cell::sync::OnceCell;
 use tokio::{
     io::{copy, split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{TcpListener, UnixStream},
@@ -15,6 +15,8 @@ use tokio_socks::{
     Error,
     Result,
 };
+
+use super::*;
 
 pub async fn echo_server() -> Result<()> {
     let listener = TcpListener::bind(&SocketAddr::from(([0, 0, 0, 0], 10007))).await?;

@@ -1,8 +1,3 @@
-use either::Either;
-use futures_util::{
-    future,
-    stream::{self, Once, Stream},
-};
 use std::{
     borrow::Cow,
     io::Result as IoResult,
@@ -12,7 +7,12 @@ use std::{
     vec,
 };
 
+use either::Either;
 pub use error::Error;
+use futures_util::{
+    future,
+    stream::{self, Once, Stream},
+};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -265,9 +265,10 @@ pub mod tcp;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use futures_executor::block_on;
     use futures_util::StreamExt;
+
+    use super::*;
 
     fn to_proxy_addrs<T: ToProxyAddrs>(t: T) -> Result<Vec<SocketAddr>> {
         Ok(block_on(t.to_proxy_addrs().map(Result::unwrap).collect()))

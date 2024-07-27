@@ -1,19 +1,21 @@
-use super::*;
-use futures_util::{io::copy, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use once_cell::sync::OnceCell;
-use smol::net::{unix::UnixStream, TcpListener};
 use std::{
     future::Future,
     io::{Read, Write},
     net::{SocketAddr, TcpStream as StdTcpStream},
     sync::Mutex,
 };
+
+use futures_util::{io::copy, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use once_cell::sync::OnceCell;
+use smol::net::{unix::UnixStream, TcpListener};
 use tokio_socks::{
     io::Compat,
     tcp::{socks4::Socks4Listener, socks5::Socks5Listener},
     Error,
     Result,
 };
+
+use super::*;
 
 pub async fn echo_server() -> Result<()> {
     let listener = TcpListener::bind(&SocketAddr::from(([0, 0, 0, 0], 10007))).await?;
