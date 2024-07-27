@@ -5,7 +5,7 @@ mod futures;
 ///
 /// Example:
 /// ```no_run
-/// use async_std::os::unix::net::UnixStream;
+/// use smol::net::unix::UnixStream;
 /// use tokio_socks::{io::Compat, tcp::Socks5Stream};
 /// let socket = Compat::new(UnixStream::connect(proxy_addr)
 ///     .await
