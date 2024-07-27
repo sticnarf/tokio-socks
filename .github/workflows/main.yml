@@ -13,12 +13,11 @@ jobs:
         rust: [stable, beta, nightly]
     runs-on: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ matrix.rust }}
           components: clippy
-          override: true
       - name: Clippy
         run: |
           cargo clippy --all-targets --no-default-features --features=tokio -- -D warnings

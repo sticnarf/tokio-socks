@@ -15,7 +15,6 @@ edition = "2018"
 [features]
 default = ["tokio"]
 tor = []
-futures-io = ["dep:futures-io"]
 
 [[example]]
 name = "chainproxy"
