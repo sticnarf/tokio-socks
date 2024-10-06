@@ -426,7 +426,7 @@ where
             let snego_token_len = u16::to_be_bytes(snego_token.len() as u16);
             gssapi_buf.extend_from_slice(&snego_token_len); // len
             gssapi_buf.extend(snego_token); // token
-            return Ok(gssapi_buf);
+            Ok(gssapi_buf)
         } else {
             unreachable!()
         }
@@ -471,7 +471,7 @@ where
             let context_token_len = u16::to_be_bytes(context_token.len() as u16);
             gssapi_buf.extend_from_slice(&context_token_len); // len
             gssapi_buf.extend(context_token); // token
-            return Ok(gssapi_buf);
+            Ok(gssapi_buf)
         } else {
             unreachable!()
         }
