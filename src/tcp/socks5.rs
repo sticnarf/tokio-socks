@@ -1,7 +1,5 @@
 #[cfg(feature = "gssapi")]
 use crate::GssapiAuthenticator;
-use crate::{Authentication, Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
-use futures_util::stream::{self, Fuse, Stream, StreamExt};
 use std::{
     borrow::Borrow,
     io,
@@ -10,9 +8,16 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
-    net::TcpStream,
+
+use futures_util::stream::{self, Fuse, Stream, StreamExt};
+#[cfg(feature = "tokio")]
+use tokio::net::TcpStream;
+
+#[cfg(feature = "tokio")]
+use crate::ToProxyAddrs;
+use crate::{
+    io::{AsyncSocket, AsyncSocketExt},
+    Authentication, Error, IntoTargetAddr, Result, TargetAddr,
 };
 
 #[repr(u8)]
@@ -51,6 +56,7 @@ impl<S> DerefMut for Socks5Stream<S> {
     }
 }
 
+#[cfg(feature = "tokio")]
 impl Socks5Stream<TcpStream> {
     /// Connects to a target server through a SOCKS5 proxy given the proxy
     /// address.
@@ -168,7 +174,7 @@ impl Socks5Stream<TcpStream> {
 
 impl<S> Socks5Stream<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncSocket + Unpin,
 {
     /// Connects to a target server through a SOCKS5 proxy given a socket to it.
     ///
@@ -317,6 +323,7 @@ where
 pub struct SocksConnector<'a, 't, S> {
     auth: Authentication<'a>,
     command: Command,
+    #[allow(dead_code)]
     proxy: Fuse<S>,
     target: TargetAddr<'t>,
     buf: [u8; 513],
@@ -340,6 +347,7 @@ where
         }
     }
 
+    #[cfg(feature = "tokio")]
     /// Connect to the proxy server, authenticate and issue the SOCKS command
     pub async fn execute(&mut self) -> Result<Socks5Stream<TcpStream>> {
         let next_addr = self.proxy.select_next_some().await?;
@@ -350,10 +358,7 @@ where
         self.execute_with_socket(tcp).await
     }
 
-    pub async fn execute_with_socket<T: AsyncRead + AsyncWrite + Unpin>(
-        &mut self,
-        mut socket: T,
-    ) -> Result<Socks5Stream<T>> {
+    pub async fn execute_with_socket<T: AsyncSocket + Unpin>(&mut self, mut socket: T) -> Result<Socks5Stream<T>> {
         self.authenticate(&mut socket).await?;
 
         // Send request address that should be proxied
@@ -648,7 +653,121 @@ where
         Ok(())
     }
 
-    async fn password_authentication_protocol<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
+    #[cfg(feature = "gssapi")]
+    async fn gssapi_authentication_protocol<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
+        // Implement Gssapi Auth Protocol.
+        // Error out if: Server selected gssapi but, we had None
+        let renegotiate_sec_token = match &self.auth {
+            Authentication::Gssapi { gssapi_authenticator } => gssapi_authenticator.renegotiate_sec_token,
+            _ => return Err(Error::InvalidAuthValues("Server expected GSSApi auth")),
+        };
+
+        // Send sec_context token for first time with no renegotiation.
+        let sec_context_buf = self.prepare_send_gssapi_sec_context(None).await?;
+        tcp.write_all(&sec_context_buf).await?;
+
+        // Recieve and Validate server response
+        self.prepare_recv_gssapi_auth();
+        tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+
+        if self.buf[1] == 0xff {
+            /*
+                If the server refuses the client's connection for any reason (GSS-API authentication failure or otherwise), it will return:
+                    +------+------+
+                    + ver  | mtyp |
+                    +------+------+
+                    + 0x01 | 0xff |
+                    +------+------+
+
+                Where:
+
+                - "ver" is the protocol version number, here 1 to represent the
+                first version of the SOCKS/GSS-API protocol
+
+                - "mtyp" is the message type, here 0xff to represent an abort
+                message
+            */
+            return Err(Error::GssapiAuthFailure(self.buf[1]));
+        } else {
+            /*
+                In all continue/confirmation cases, the server uses the same message
+                type as for the client -> server interaction.
+
+                +------+------+------+.......................+
+                + ver  | mtyp | len  |       token           |
+                +------+------+------+.......................+
+                + 0x01 | 0x01 | 0x02 | up to 2^16 - 1 octets |
+                +------+------+------+.......................+
+            */
+
+            // On sec_context validation done.
+            // 1.a. Get length of output_token from response. If this token is non-empty we need to renegotiate.
+            self.prepare_recv_gssapi_auth();
+            tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+
+            let renego_challenge_len = u16::from_be_bytes([self.buf[0], self.buf[1]]);
+            // If the sub_negotiation challenge is non-empty get the challenge returned and renegotiate.
+            if renego_challenge_len > 0 {
+                /*
+                    If gss_init_sec_context returns GSS_S_CONTINUE_NEEDED, then the
+                    client should expect the server to issue a token in the
+                    subsequent subnegotiation response.  The client must pass the
+                    token to another call to gss_init_sec_context, and repeat this
+                    procedure until "continue" operations are complete.
+                */
+                // Currently supporting only single re-negotitation.
+
+                let mut renego_challenge: Vec<u8> = Vec::with_capacity(renego_challenge_len as usize);
+                tcp.read_exact(&mut renego_challenge).await?;
+
+                // Do renegotiation only if user has specified to do so.
+                if renegotiate_sec_token {
+                    let sec_context_buf = self.prepare_send_gssapi_sec_context(Some(&renego_challenge)).await?;
+                    tcp.write_all(&sec_context_buf).await?;
+
+                    // Check for success of renegotiation
+                    self.prepare_recv_gssapi_auth();
+                    tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+
+                    if self.buf[1] == 0xff {
+                        return Err(Error::GssapiAuthFailure(0));
+                    } else {
+                        self.prepare_recv_gssapi_auth();
+                        tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+
+                        let renego_challenge_len = u16::from_be_bytes([self.buf[0], self.buf[1]]);
+                        // drain stream of the renegotiate token if any
+                        let mut renego_challenge: Vec<u8> = Vec::with_capacity(renego_challenge_len as usize);
+                        tcp.read_exact(&mut renego_challenge).await?;
+                        // assume negotiation has succeded.
+                    }
+                }
+            }
+
+            let gssapi_buf = self.prepare_send_gssapi_subnego_token().await?;
+            tcp.write_all(&gssapi_buf).await?;
+
+            // recv response
+            self.prepare_recv_gssapi_auth();
+            tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+
+            if self.buf[1] == 0x02 {
+                // Subnegotiation was success.
+                // If there is anything sent by server. We can drain the remaining buf, as we do not need it.
+                self.prepare_recv_gssapi_auth();
+                tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
+                let remainder_len = u16::from_be_bytes([self.buf[0], self.buf[1]]);
+
+                let mut remainder_buf: Vec<u8> = Vec::with_capacity(remainder_len as usize);
+                tcp.read_exact(&mut remainder_buf).await?;
+            } else {
+                return Err(Error::GssapiAuthFailure(self.buf[1]));
+            }
+        }
+        Ok(())
+    }
+
+    async fn password_authentication_protocol<T: AsyncSocket + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
         if let Authentication::None = self.auth {
             return Err(Error::AuthorizationRequired);
         }
@@ -669,7 +788,7 @@ where
         Ok(())
     }
 
-    async fn authenticate<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
+    async fn authenticate<T: AsyncSocket + Unpin>(&mut self, tcp: &mut T) -> Result<()> {
         // Write request to connect/authenticate
         self.prepare_send_method_selection();
         tcp.write_all(&self.buf[self.ptr..self.len]).await?;
@@ -702,7 +821,7 @@ where
         Ok(())
     }
 
-    async fn receive_reply<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<TargetAddr<'static>> {
+    async fn receive_reply<T: AsyncSocket + Unpin>(&mut self, tcp: &mut T) -> Result<TargetAddr<'static>> {
         self.prepare_recv_reply();
         self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
         if self.buf[0] != 0x05 {
@@ -786,6 +905,7 @@ pub struct Socks5Listener<S> {
     inner: Socks5Stream<S>,
 }
 
+#[cfg(feature = "tokio")]
 impl Socks5Listener<TcpStream> {
     /// Initiates a BIND request to the specified proxy.
     ///
@@ -851,7 +971,7 @@ impl Socks5Listener<TcpStream> {
 
 impl<S> Socks5Listener<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncSocket + Unpin,
 {
     /// Initiates a BIND request to the specified proxy using the given socket
     /// to it.
@@ -940,28 +1060,62 @@ where
     }
 }
 
-impl<T> AsyncRead for Socks5Stream<T>
+#[cfg(feature = "tokio")]
+impl<T> tokio::io::AsyncRead for Socks5Stream<T>
 where
-    T: AsyncRead + Unpin,
+    T: tokio::io::AsyncRead + Unpin,
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        tokio::io::AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
     }
 }
 
-impl<T> AsyncWrite for Socks5Stream<T>
+#[cfg(feature = "tokio")]
+impl<T> tokio::io::AsyncWrite for Socks5Stream<T>
 where
-    T: AsyncWrite + Unpin,
+    T: tokio::io::AsyncWrite + Unpin,
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
+        tokio::io::AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
+        tokio::io::AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_shutdown(Pin::new(&mut self.socket), cx)
+        tokio::io::AsyncWrite::poll_shutdown(Pin::new(&mut self.socket), cx)
+    }
+}
+
+#[cfg(feature = "futures-io")]
+impl<T> futures_io::AsyncRead for Socks5Stream<T>
+where
+    T: futures_io::AsyncRead + Unpin,
+{
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        futures_io::AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
+    }
+}
+
+#[cfg(feature = "futures-io")]
+impl<T> futures_io::AsyncWrite for Socks5Stream<T>
+where
+    T: futures_io::AsyncWrite + Unpin,
+{
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        futures_io::AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        futures_io::AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        futures_io::AsyncWrite::poll_close(Pin::new(&mut self.socket), cx)
     }
 }

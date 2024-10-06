@@ -1,21 +1,21 @@
 #[cfg(feature = "gssapi")]
 use async_trait::async_trait;
-use either::Either;
-use futures_util::{
-    future,
-    stream::{self, Once, Stream},
-};
 use std::{
     borrow::Cow,
     fmt::Debug,
-    io,
+    io::Result as IoResult,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     pin::Pin,
     task::{Context, Poll},
     vec,
 };
 
+use either::Either;
 pub use error::Error;
+use futures_util::{
+    future,
+    stream::{self, Once, Stream},
+};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -55,7 +55,8 @@ impl<'a> ToProxyAddrs for &'a [SocketAddr] {
     type Output = ProxyAddrsStream;
 
     fn to_proxy_addrs(&self) -> Self::Output {
-        ProxyAddrsStream(Some(io::Result::Ok(self.to_vec().into_iter())))
+        let addrs = self.to_vec();
+        ProxyAddrsStream(Some(IoResult::Ok(addrs.into_iter())))
     }
 }
 
@@ -83,7 +84,7 @@ impl<'a, T: ToProxyAddrs + ?Sized> ToProxyAddrs for &'a T {
     }
 }
 
-pub struct ProxyAddrsStream(Option<io::Result<vec::IntoIter<SocketAddr>>>);
+pub struct ProxyAddrsStream(Option<IoResult<vec::IntoIter<SocketAddr>>>);
 
 impl Stream for ProxyAddrsStream {
     type Item = Result<SocketAddr>;
@@ -127,7 +128,7 @@ impl<'a> TargetAddr<'a> {
 impl<'a> ToSocketAddrs for TargetAddr<'a> {
     type Iter = Either<std::option::IntoIter<SocketAddr>, std::vec::IntoIter<SocketAddr>>;
 
-    fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
+    fn to_socket_addrs(&self) -> IoResult<Self::Iter> {
         Ok(match self {
             TargetAddr::Ip(addr) => Either::Left(addr.to_socket_addrs()?),
             TargetAddr::Domain(domain, port) => Either::Right((&**domain, *port).to_socket_addrs()?),
@@ -308,13 +309,15 @@ pub trait GssapiAuthentication: Send + Sync {
 }
 
 mod error;
+pub mod io;
 pub mod tcp;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use futures_executor::block_on;
     use futures_util::StreamExt;
+
+    use super::*;
 
     fn to_proxy_addrs<T: ToProxyAddrs>(t: T) -> Result<Vec<SocketAddr>> {
         Ok(block_on(t.to_proxy_addrs().map(Result::unwrap).collect()))
@@ -331,7 +334,7 @@ mod tests {
     #[test]
     fn converts_socket_addr_ref_to_proxy_addrs() -> Result<()> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
-        let res = to_proxy_addrs(&addr)?;
+        let res = to_proxy_addrs(addr)?;
         assert_eq!(&res[..], &[addr]);
         Ok(())
     }
@@ -365,7 +368,7 @@ mod tests {
     #[test]
     fn converts_socket_addr_ref_to_target_addr() -> Result<()> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
-        let res = into_target_addr(&addr)?;
+        let res = into_target_addr(addr)?;
         assert_eq!(TargetAddr::Ip(addr), res);
         Ok(())
     }

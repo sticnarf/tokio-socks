@@ -1,5 +1,3 @@
-use crate::{Error, IntoTargetAddr, Result, TargetAddr, ToProxyAddrs};
-use futures_util::stream::{self, Fuse, Stream, StreamExt};
 use std::{
     borrow::Borrow,
     io,
@@ -8,9 +6,19 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
-    net::TcpStream,
+
+use futures_util::stream::{self, Fuse, Stream, StreamExt};
+#[cfg(feature = "tokio")]
+use tokio::net::TcpStream;
+
+#[cfg(feature = "tokio")]
+use crate::ToProxyAddrs;
+use crate::{
+    io::{AsyncSocket, AsyncSocketExt},
+    Error,
+    IntoTargetAddr,
+    Result,
+    TargetAddr,
 };
 
 #[repr(u8)]
@@ -43,6 +51,7 @@ impl<S> DerefMut for Socks4Stream<S> {
     }
 }
 
+#[cfg(feature = "tokio")]
 impl Socks4Stream<TcpStream> {
     /// Connects to a target server through a SOCKS4 proxy given the proxy
     /// address.
@@ -104,8 +113,7 @@ impl Socks4Stream<TcpStream> {
 }
 
 impl<S> Socks4Stream<S>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
+where S: AsyncSocket + Unpin
 {
     /// Connects to a target server through a SOCKS4 proxy given a socket to it.
     ///
@@ -114,9 +122,7 @@ where
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
     pub async fn connect_with_socket<'t, T>(socket: S, target: T) -> Result<Socks4Stream<S>>
-    where
-        T: IntoTargetAddr<'t>,
-    {
+    where T: IntoTargetAddr<'t> {
         Self::execute_command_with_socket(socket, target, None, CommandV4::Connect).await
     }
 
@@ -138,13 +144,12 @@ where
         Self::execute_command_with_socket(socket, target, Some(user_id), CommandV4::Connect).await
     }
 
-    fn validate_userid<'a>(user_id: Option<&'a str>) -> Result<()> {
-        /*
-            A hardcode limit for length of userid must be enforced to avoid, buffer overflow.
-        */
+    fn validate_userid(user_id: Option<&str>) -> Result<()> {
+        // A hardcode limit for length of userid must be enforced to avoid, buffer
+        // overflow.
         if let Some(user_id) = user_id {
             let user_id_len = user_id.len();
-            if user_id_len < 1 || user_id_len > 255 {
+            if !(1..=255).contains(&user_id_len) {
                 Err(Error::InvalidAuthValues("userid length should between 1 to 255"))?
             }
         }
@@ -191,6 +196,7 @@ where
 pub struct Socks4Connector<'a, 't, S> {
     user_id: Option<&'a str>,
     command: CommandV4,
+    #[allow(dead_code)]
     proxy: Fuse<S>,
     target: TargetAddr<'t>,
     buf: [u8; 513],
@@ -199,8 +205,7 @@ pub struct Socks4Connector<'a, 't, S> {
 }
 
 impl<'a, 't, S> Socks4Connector<'a, 't, S>
-where
-    S: Stream<Item = Result<SocketAddr>> + Unpin,
+where S: Stream<Item = Result<SocketAddr>> + Unpin
 {
     fn new(user_id: Option<&'a str>, command: CommandV4, proxy: Fuse<S>, target: TargetAddr<'t>) -> Self {
         Socks4Connector {
@@ -214,6 +219,7 @@ where
         }
     }
 
+    #[cfg(feature = "tokio")]
     /// Connect to the proxy server, authenticate and issue the SOCKS command
     pub async fn execute(&mut self) -> Result<Socks4Stream<TcpStream>> {
         let next_addr = self.proxy.select_next_some().await?;
@@ -224,10 +230,7 @@ where
         self.execute_with_socket(tcp).await
     }
 
-    pub async fn execute_with_socket<T: AsyncRead + AsyncWrite + Unpin>(
-        &mut self,
-        mut socket: T,
-    ) -> Result<Socks4Stream<T>> {
+    pub async fn execute_with_socket<T: AsyncSocket + Unpin>(&mut self, mut socket: T) -> Result<Socks4Stream<T>> {
         // Send request address that should be proxied
         self.prepare_send_request()?;
         socket.write_all(&self.buf[self.ptr..self.len]).await?;
@@ -285,23 +288,21 @@ where
         self.len = 8;
     }
 
-    async fn receive_reply<T: AsyncRead + AsyncWrite + Unpin>(&mut self, tcp: &mut T) -> Result<TargetAddr<'static>> {
-        /*
-            https://www.openssh.com/txt/socks4.protocol
-                       +----+----+----+----+----+----+----+----+
-                       | VN | CD | DSTPORT |      DSTIP        |
-                       +----+----+----+----+----+----+----+----+
-           # of bytes:	   1    1      2              4
-
-           VN is the version of the reply code and should be 0. CD is the result
-           code with one of the following values:
-               90: request granted
-               91: request rejected or failed
-               92: request rejected becasue SOCKS server cannot connect to
-                   identd on the client
-               93: request rejected because the client program and identd
-                   report different user-ids
-        */
+    async fn receive_reply<T: AsyncSocket + Unpin>(&mut self, tcp: &mut T) -> Result<TargetAddr<'static>> {
+        // https://www.openssh.com/txt/socks4.protocol
+        // +----+----+----+----+----+----+----+----+
+        // | VN | CD | DSTPORT |      DSTIP        |
+        // +----+----+----+----+----+----+----+----+
+        // # of bytes:	   1    1      2              4
+        //
+        // VN is the version of the reply code and should be 0. CD is the result
+        // code with one of the following values:
+        // 90: request granted
+        // 91: request rejected or failed
+        // 92: request rejected becasue SOCKS server cannot connect to
+        // identd on the client
+        // 93: request rejected because the client program and identd
+        // report different user-ids
 
         self.prepare_recv_reply();
         self.ptr += tcp.read_exact(&mut self.buf[self.ptr..self.len]).await?;
@@ -335,6 +336,7 @@ pub struct Socks4Listener<S> {
     inner: Socks4Stream<S>,
 }
 
+#[cfg(feature = "tokio")]
 impl Socks4Listener<TcpStream> {
     /// Initiates a BIND request to the specified proxy.
     ///
@@ -398,8 +400,7 @@ impl Socks4Listener<TcpStream> {
 }
 
 impl<S> Socks4Listener<S>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
+where S: AsyncSocket + Unpin
 {
     /// Initiates a BIND request to the specified proxy using the given socket
     /// to it.
@@ -412,9 +413,7 @@ where
     /// It propagates the error that occurs in the conversion from `T` to
     /// `TargetAddr`.
     pub async fn bind_with_socket<'t, T>(socket: S, target: T) -> Result<Socks4Listener<S>>
-    where
-        T: IntoTargetAddr<'t>,
-    {
+    where T: IntoTargetAddr<'t> {
         Self::bind_to_target_with_socket(None, socket, target).await
     }
 
@@ -492,28 +491,58 @@ where
     }
 }
 
-impl<T> AsyncRead for Socks4Stream<T>
-where
-    T: AsyncRead + Unpin,
+#[cfg(feature = "tokio")]
+impl<T> tokio::io::AsyncRead for Socks4Stream<T>
+where T: tokio::io::AsyncRead + Unpin
 {
-    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        tokio::io::AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
     }
 }
 
-impl<T> AsyncWrite for Socks4Stream<T>
-where
-    T: AsyncWrite + Unpin,
+#[cfg(feature = "tokio")]
+impl<T> tokio::io::AsyncWrite for Socks4Stream<T>
+where T: tokio::io::AsyncWrite + Unpin
 {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
+        tokio::io::AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
+        tokio::io::AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_shutdown(Pin::new(&mut self.socket), cx)
+        tokio::io::AsyncWrite::poll_shutdown(Pin::new(&mut self.socket), cx)
+    }
+}
+
+#[cfg(feature = "futures-io")]
+impl<T> futures_io::AsyncRead for Socks4Stream<T>
+where T: futures_io::AsyncRead + Unpin
+{
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        futures_io::AsyncRead::poll_read(Pin::new(&mut self.socket), cx, buf)
+    }
+}
+
+#[cfg(feature = "futures-io")]
+impl<T> futures_io::AsyncWrite for Socks4Stream<T>
+where T: futures_io::AsyncWrite + Unpin
+{
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        futures_io::AsyncWrite::poll_write(Pin::new(&mut self.socket), cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        futures_io::AsyncWrite::poll_flush(Pin::new(&mut self.socket), cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        futures_io::AsyncWrite::poll_close(Pin::new(&mut self.socket), cx)
     }
 }
