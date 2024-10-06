@@ -12,7 +12,7 @@ Asynchronous SOCKS proxy support for Rust.
 - [x] `BIND` command
 - [ ] `ASSOCIATE` command
 - [x] Username/password authentication
-- [ ] GSSAPI authentication
+- [x] GSSAPI authentication
 - [ ] Asynchronous DNS resolution
 - [X] Chain proxies ([see example](examples/chainproxy.rs))
 - [X] SOCKS4
