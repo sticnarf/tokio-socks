@@ -1,3 +1,11 @@
+use borsh::{BorshDeserialize, BorshSerialize};
+use either::Either;
+pub use error::Error;
+use futures_util::{
+    future,
+    stream::{self, Once, Stream},
+};
+use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
     io::Result as IoResult,
@@ -5,13 +13,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
     vec,
-};
-
-use either::Either;
-pub use error::Error;
-use futures_util::{
-    future,
-    stream::{self, Once, Stream},
 };
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -98,7 +99,7 @@ impl Stream for ProxyAddrsStream {
 }
 
 /// A SOCKS connection target.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub enum TargetAddr<'a> {
     /// Connect to an IP address.
     Ip(SocketAddr),
@@ -236,7 +237,8 @@ impl IntoTargetAddr<'static> for (String, u16) {
 }
 
 impl<'a, T> IntoTargetAddr<'a> for &'a T
-where T: IntoTargetAddr<'a> + Copy
+where
+    T: IntoTargetAddr<'a> + Copy,
 {
     fn into_target_addr(self) -> Result<TargetAddr<'a>> {
         (*self).into_target_addr()
@@ -302,7 +304,9 @@ mod tests {
     }
 
     fn into_target_addr<'a, T>(t: T) -> Result<TargetAddr<'a>>
-    where T: IntoTargetAddr<'a> {
+    where
+        T: IntoTargetAddr<'a>,
+    {
         t.into_target_addr()
     }
 
@@ -373,5 +377,21 @@ mod tests {
         assert!(into_target_addr(addr).is_err());
         let addr = "www.example.com:65536";
         assert!(into_target_addr(addr).is_err());
+    }
+
+    #[test]
+    fn test_serde_serialization() {
+        let addr = TargetAddr::Domain(Cow::Borrowed("example.com"), 80);
+        let serialized = serde_json::to_string(&addr).unwrap();
+        let deserialized: TargetAddr = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(addr, deserialized);
+    }
+
+    #[test]
+    fn test_borsh_serialization() {
+        let addr = TargetAddr::Domain(Cow::Borrowed("example.com"), 80);
+        let serialized = addr.try_to_vec().unwrap();
+        let deserialized: TargetAddr = TargetAddr::try_from_slice(&serialized).unwrap();
+        assert_eq!(addr, deserialized);
     }
 }
