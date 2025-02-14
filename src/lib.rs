@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    fmt,
     io::Result as IoResult,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     pin::Pin,
@@ -108,6 +109,25 @@ pub enum TargetAddr<'a> {
     /// The domain name will be passed along to the proxy server and DNS lookup
     /// will happen there.
     Domain(Cow<'a, str>, u16),
+}
+
+impl<'a> fmt::Display for TargetAddr<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TargetAddr::Ip(addr) => write!(f, "{}", addr),
+            TargetAddr::Domain(domain, port) => write!(f, "{}:{}", domain, port),
+        }
+    }
+}
+
+impl<'a> TargetAddr<'a> {
+    /// Converts the `TargetAddr` to a `String`.
+    pub fn to_string(&self) -> String {
+        match self {
+            TargetAddr::Ip(addr) => addr.to_string(),
+            TargetAddr::Domain(domain, port) => format!("{}:{}", domain, port),
+        }
+    }
 }
 
 impl<'a> TargetAddr<'a> {
@@ -236,7 +256,8 @@ impl IntoTargetAddr<'static> for (String, u16) {
 }
 
 impl<'a, T> IntoTargetAddr<'a> for &'a T
-where T: IntoTargetAddr<'a> + Copy
+where
+    T: IntoTargetAddr<'a> + Copy,
 {
     fn into_target_addr(self) -> Result<TargetAddr<'a>> {
         (*self).into_target_addr()
@@ -275,6 +296,30 @@ mod tests {
     }
 
     #[test]
+    fn test_display_ip() {
+        let addr = TargetAddr::Ip(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080));
+        assert_eq!(format!("{}", addr), "127.0.0.1:8080");
+    }
+
+    #[test]
+    fn test_display_domain() {
+        let addr = TargetAddr::Domain(Cow::Borrowed("example.com"), 80);
+        assert_eq!(format!("{}", addr), "example.com:80");
+    }
+
+    #[test]
+    fn test_to_string_ip() {
+        let addr = TargetAddr::Ip(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080));
+        assert_eq!(addr.to_string(), "127.0.0.1:8080");
+    }
+
+    #[test]
+    fn test_to_string_domain() {
+        let addr = TargetAddr::Domain(Cow::Borrowed("example.com"), 80);
+        assert_eq!(addr.to_string(), "example.com:80");
+    }
+
+    #[test]
     fn converts_socket_addr_to_proxy_addrs() -> Result<()> {
         let addr = SocketAddr::from(([1, 1, 1, 1], 443));
         let res = to_proxy_addrs(addr)?;
@@ -302,7 +347,9 @@ mod tests {
     }
 
     fn into_target_addr<'a, T>(t: T) -> Result<TargetAddr<'a>>
-    where T: IntoTargetAddr<'a> {
+    where
+        T: IntoTargetAddr<'a>,
+    {
         t.into_target_addr()
     }
 
