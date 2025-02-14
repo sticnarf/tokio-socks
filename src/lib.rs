@@ -48,6 +48,7 @@ trivial_impl_to_proxy_addrs!((Ipv6Addr, u16));
 trivial_impl_to_proxy_addrs!(SocketAddrV4);
 trivial_impl_to_proxy_addrs!(SocketAddrV6);
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a> ToProxyAddrs for &'a [SocketAddr] {
     type Output = ProxyAddrsStream;
 
@@ -65,6 +66,7 @@ impl ToProxyAddrs for str {
     }
 }
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a> ToProxyAddrs for (&'a str, u16) {
     type Output = ProxyAddrsStream;
 
@@ -73,6 +75,7 @@ impl<'a> ToProxyAddrs for (&'a str, u16) {
     }
 }
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a, T: ToProxyAddrs + ?Sized> ToProxyAddrs for &'a T {
     type Output = T::Output;
 
