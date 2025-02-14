@@ -102,7 +102,7 @@ impl Stream for ProxyAddrsStream {
 }
 
 /// A SOCKS connection target.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TargetAddr<'a> {
     /// Connect to an IP address.
     Ip(SocketAddr),
@@ -290,6 +290,22 @@ mod tests {
 
     fn to_proxy_addrs<T: ToProxyAddrs>(t: T) -> Result<Vec<SocketAddr>> {
         Ok(block_on(t.to_proxy_addrs().map(Result::unwrap).collect()))
+    }
+
+    #[test]
+    fn test_clone_ip() {
+        let addr = TargetAddr::Ip(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080));
+        let addr_clone = addr.clone();
+        assert_eq!(addr, addr_clone);
+        assert_eq!(addr.to_string(), addr_clone.to_string());
+    }
+
+    #[test]
+    fn test_clone_domain() {
+        let addr = TargetAddr::Domain(Cow::Borrowed("example.com"), 80);
+        let addr_clone = addr.clone();
+        assert_eq!(addr, addr_clone);
+        assert_eq!(addr.to_string(), addr_clone.to_string());
     }
 
     #[test]
