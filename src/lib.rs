@@ -114,6 +114,7 @@ pub enum TargetAddr<'a> {
     Domain(Cow<'a, str>, u16),
 }
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a> fmt::Display for TargetAddr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -123,6 +124,7 @@ impl<'a> fmt::Display for TargetAddr<'a> {
     }
 }
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a> TargetAddr<'a> {
     /// Creates owned `TargetAddr` by cloning. It is usually used to eliminate
     /// the lifetime bound.
@@ -134,6 +136,7 @@ impl<'a> TargetAddr<'a> {
     }
 }
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a> ToSocketAddrs for TargetAddr<'a> {
     type Iter = Either<std::option::IntoIter<SocketAddr>, std::vec::IntoIter<SocketAddr>>;
 
@@ -264,6 +267,7 @@ enum Authentication<'a> {
     None,
 }
 
+#[allow(clippy::needless_lifetimes)]
 impl<'a> Authentication<'a> {
     fn id(&self) -> u8 {
         match self {
