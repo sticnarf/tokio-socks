@@ -121,16 +121,6 @@ impl<'a> fmt::Display for TargetAddr<'a> {
 }
 
 impl<'a> TargetAddr<'a> {
-    /// Converts the `TargetAddr` to a `String`.
-    pub fn to_string(&self) -> String {
-        match self {
-            TargetAddr::Ip(addr) => addr.to_string(),
-            TargetAddr::Domain(domain, port) => format!("{}:{}", domain, port),
-        }
-    }
-}
-
-impl<'a> TargetAddr<'a> {
     /// Creates owned `TargetAddr` by cloning. It is usually used to eliminate
     /// the lifetime bound.
     pub fn to_owned(&self) -> TargetAddr<'static> {
