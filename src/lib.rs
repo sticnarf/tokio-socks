@@ -48,8 +48,7 @@ trivial_impl_to_proxy_addrs!((Ipv6Addr, u16));
 trivial_impl_to_proxy_addrs!(SocketAddrV4);
 trivial_impl_to_proxy_addrs!(SocketAddrV6);
 
-#[allow(clippy::needless_lifetimes)]
-impl<'a> ToProxyAddrs for &'a [SocketAddr] {
+impl ToProxyAddrs for &[SocketAddr] {
     type Output = ProxyAddrsStream;
 
     fn to_proxy_addrs(&self) -> Self::Output {
@@ -66,8 +65,7 @@ impl ToProxyAddrs for str {
     }
 }
 
-#[allow(clippy::needless_lifetimes)]
-impl<'a> ToProxyAddrs for (&'a str, u16) {
+impl ToProxyAddrs for (&str, u16) {
     type Output = ProxyAddrsStream;
 
     fn to_proxy_addrs(&self) -> Self::Output {
@@ -75,8 +73,7 @@ impl<'a> ToProxyAddrs for (&'a str, u16) {
     }
 }
 
-#[allow(clippy::needless_lifetimes)]
-impl<'a, T: ToProxyAddrs + ?Sized> ToProxyAddrs for &'a T {
+impl<T: ToProxyAddrs + ?Sized> ToProxyAddrs for &T {
     type Output = T::Output;
 
     fn to_proxy_addrs(&self) -> Self::Output {
@@ -114,8 +111,7 @@ pub enum TargetAddr<'a> {
     Domain(Cow<'a, str>, u16),
 }
 
-#[allow(clippy::needless_lifetimes)]
-impl<'a> fmt::Display for TargetAddr<'a> {
+impl fmt::Display for TargetAddr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TargetAddr::Ip(addr) => write!(f, "{}", addr),
@@ -124,8 +120,7 @@ impl<'a> fmt::Display for TargetAddr<'a> {
     }
 }
 
-#[allow(clippy::needless_lifetimes)]
-impl<'a> TargetAddr<'a> {
+impl TargetAddr<'_> {
     /// Creates owned `TargetAddr` by cloning. It is usually used to eliminate
     /// the lifetime bound.
     pub fn to_owned(&self) -> TargetAddr<'static> {
@@ -136,8 +131,7 @@ impl<'a> TargetAddr<'a> {
     }
 }
 
-#[allow(clippy::needless_lifetimes)]
-impl<'a> ToSocketAddrs for TargetAddr<'a> {
+impl ToSocketAddrs for TargetAddr<'_> {
     type Iter = Either<std::option::IntoIter<SocketAddr>, std::vec::IntoIter<SocketAddr>>;
 
     fn to_socket_addrs(&self) -> IoResult<Self::Iter> {
@@ -267,8 +261,7 @@ enum Authentication<'a> {
     None,
 }
 
-#[allow(clippy::needless_lifetimes)]
-impl<'a> Authentication<'a> {
+impl Authentication<'_> {
     fn id(&self) -> u8 {
         match self {
             Authentication::Password { .. } => 0x02,
