@@ -8,6 +8,7 @@ use futures_util::{
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
+    fmt,
     io::Result as IoResult,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     pin::Pin,
@@ -48,7 +49,7 @@ trivial_impl_to_proxy_addrs!((Ipv6Addr, u16));
 trivial_impl_to_proxy_addrs!(SocketAddrV4);
 trivial_impl_to_proxy_addrs!(SocketAddrV6);
 
-impl<'a> ToProxyAddrs for &'a [SocketAddr] {
+impl ToProxyAddrs for &[SocketAddr] {
     type Output = ProxyAddrsStream;
 
     fn to_proxy_addrs(&self) -> Self::Output {
@@ -65,7 +66,7 @@ impl ToProxyAddrs for str {
     }
 }
 
-impl<'a> ToProxyAddrs for (&'a str, u16) {
+impl ToProxyAddrs for (&str, u16) {
     type Output = ProxyAddrsStream;
 
     fn to_proxy_addrs(&self) -> Self::Output {
@@ -73,7 +74,7 @@ impl<'a> ToProxyAddrs for (&'a str, u16) {
     }
 }
 
-impl<'a, T: ToProxyAddrs + ?Sized> ToProxyAddrs for &'a T {
+impl<T: ToProxyAddrs + ?Sized> ToProxyAddrs for &T {
     type Output = T::Output;
 
     fn to_proxy_addrs(&self) -> Self::Output {
@@ -99,7 +100,7 @@ impl Stream for ProxyAddrsStream {
 }
 
 /// A SOCKS connection target.
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub enum TargetAddr<'a> {
     /// Connect to an IP address.
     Ip(SocketAddr),
@@ -111,7 +112,16 @@ pub enum TargetAddr<'a> {
     Domain(Cow<'a, str>, u16),
 }
 
-impl<'a> TargetAddr<'a> {
+impl fmt::Display for TargetAddr<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TargetAddr::Ip(addr) => write!(f, "{}", addr),
+            TargetAddr::Domain(domain, port) => write!(f, "{}:{}", domain, port),
+        }
+    }
+}
+
+impl TargetAddr<'_> {
     /// Creates owned `TargetAddr` by cloning. It is usually used to eliminate
     /// the lifetime bound.
     pub fn to_owned(&self) -> TargetAddr<'static> {
@@ -122,7 +132,7 @@ impl<'a> TargetAddr<'a> {
     }
 }
 
-impl<'a> ToSocketAddrs for TargetAddr<'a> {
+impl ToSocketAddrs for TargetAddr<'_> {
     type Iter = Either<std::option::IntoIter<SocketAddr>, std::vec::IntoIter<SocketAddr>>;
 
     fn to_socket_addrs(&self) -> IoResult<Self::Iter> {
@@ -252,7 +262,7 @@ enum Authentication<'a> {
     None,
 }
 
-impl<'a> Authentication<'a> {
+impl Authentication<'_> {
     fn id(&self) -> u8 {
         match self {
             Authentication::Password { .. } => 0x02,
@@ -274,6 +284,46 @@ mod tests {
 
     fn to_proxy_addrs<T: ToProxyAddrs>(t: T) -> Result<Vec<SocketAddr>> {
         Ok(block_on(t.to_proxy_addrs().map(Result::unwrap).collect()))
+    }
+
+    #[test]
+    fn test_clone_ip() {
+        let addr = TargetAddr::Ip(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080));
+        let addr_clone = addr.clone();
+        assert_eq!(addr, addr_clone);
+        assert_eq!(addr.to_string(), addr_clone.to_string());
+    }
+
+    #[test]
+    fn test_clone_domain() {
+        let addr = TargetAddr::Domain(Cow::Borrowed("example.com"), 80);
+        let addr_clone = addr.clone();
+        assert_eq!(addr, addr_clone);
+        assert_eq!(addr.to_string(), addr_clone.to_string());
+    }
+
+    #[test]
+    fn test_display_ip() {
+        let addr = TargetAddr::Ip(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080));
+        assert_eq!(format!("{}", addr), "127.0.0.1:8080");
+    }
+
+    #[test]
+    fn test_display_domain() {
+        let addr = TargetAddr::Domain(Cow::Borrowed("example.com"), 80);
+        assert_eq!(format!("{}", addr), "example.com:80");
+    }
+
+    #[test]
+    fn test_to_string_ip() {
+        let addr = TargetAddr::Ip(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080));
+        assert_eq!(addr.to_string(), "127.0.0.1:8080");
+    }
+
+    #[test]
+    fn test_to_string_domain() {
+        let addr = TargetAddr::Domain(Cow::Borrowed("example.com"), 80);
+        assert_eq!(addr.to_string(), "example.com:80");
     }
 
     #[test]
