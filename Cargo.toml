@@ -34,6 +34,10 @@ futures-io = { version = "0.3", optional = true }
 tokio = { version = "1.0", features = ["io-util", "net"], optional = true }
 either = "1"
 thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+borsh = "0.10"
+serde_json = "1.0"  # Required for JSON serialization in tests
+
 
 [dev-dependencies]
 futures-executor = "0.3"
@@ -41,3 +45,7 @@ futures-util = { version = "0.3", default-features = false, features = ["io"] }
 tokio = { version = "1.0", features = ["io-util", "rt-multi-thread", "net"] }
 once_cell = "1.2.0"
 smol = "2.0.0"
+serde = { version = "1.0", features = ["derive"] }
+borsh = "0.10"
+serde_json = "1.0"  # Required for JSON serialization in tests
+

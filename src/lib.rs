@@ -1,3 +1,11 @@
+use borsh::{BorshDeserialize, BorshSerialize};
+use either::Either;
+pub use error::Error;
+use futures_util::{
+    future,
+    stream::{self, Once, Stream},
+};
+use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
     fmt,
@@ -6,13 +14,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
     vec,
-};
-
-use either::Either;
-pub use error::Error;
-use futures_util::{
-    future,
-    stream::{self, Once, Stream},
 };
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -99,7 +100,7 @@ impl Stream for ProxyAddrsStream {
 }
 
 /// A SOCKS connection target.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub enum TargetAddr<'a> {
     /// Connect to an IP address.
     Ip(SocketAddr),
@@ -426,5 +427,21 @@ mod tests {
         assert!(into_target_addr(addr).is_err());
         let addr = "www.example.com:65536";
         assert!(into_target_addr(addr).is_err());
+    }
+
+    #[test]
+    fn test_serde_serialization() {
+        let addr = TargetAddr::Domain(Cow::Borrowed("example.com"), 80);
+        let serialized = serde_json::to_string(&addr).unwrap();
+        let deserialized: TargetAddr = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(addr, deserialized);
+    }
+
+    #[test]
+    fn test_borsh_serialization() {
+        let addr = TargetAddr::Domain(Cow::Borrowed("example.com"), 80);
+        let serialized = addr.try_to_vec().unwrap();
+        let deserialized: TargetAddr = TargetAddr::try_from_slice(&serialized).unwrap();
+        assert_eq!(addr, deserialized);
     }
 }
