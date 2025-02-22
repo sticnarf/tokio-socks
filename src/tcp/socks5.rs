@@ -242,11 +242,11 @@ where
     fn validate_auth(auth: &Authentication<'_>) -> Result<()> {
         match auth {
             Authentication::Password { username, password } => {
-                let username_len = username.as_bytes().len();
+                let username_len = username.len();
                 if !(1..=255).contains(&username_len) {
                     Err(Error::InvalidAuthValues("username length should between 1 to 255"))?
                 }
-                let password_len = password.as_bytes().len();
+                let password_len = password.len();
                 if !(1..=255).contains(&password_len) {
                     Err(Error::InvalidAuthValues("password length should between 1 to 255"))?
                 }
