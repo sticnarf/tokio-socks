@@ -50,7 +50,7 @@ trivial_impl_to_proxy_addrs!((Ipv6Addr, u16));
 trivial_impl_to_proxy_addrs!(SocketAddrV4);
 trivial_impl_to_proxy_addrs!(SocketAddrV6);
 
-impl<'a> ToProxyAddrs for &'a [SocketAddr] {
+impl ToProxyAddrs for &[SocketAddr] {
     type Output = ProxyAddrsStream;
 
     fn to_proxy_addrs(&self) -> Self::Output {
@@ -268,29 +268,6 @@ enum Authentication<'a> {
         gssapi_authenticator: GssapiAuthenticator<'a>,
     },
     None,
-}
-
-#[cfg(feature = "gssapi")]
-pub struct GssapiAuthenticator<'a> {
-    gssapi_authenticator: &'a dyn GssapiAuthentication,
-    renegotiate_sec_token: bool,
-}
-
-#[cfg(feature = "gssapi")]
-impl<'a> GssapiAuthenticator<'a> {
-    pub fn new(gssapi_authenticator: &'a dyn GssapiAuthentication, renegotiate_sec_token: bool) -> Self {
-        GssapiAuthenticator {
-            gssapi_authenticator,
-            renegotiate_sec_token,
-        }
-    }
-}
-
-#[cfg(feature = "gssapi")]
-impl<'a> Debug for GssapiAuthenticator<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "GssapiAuthenticator")
-    }
 }
 
 #[cfg(feature = "gssapi")]
