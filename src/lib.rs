@@ -287,7 +287,7 @@ impl<'a> GssapiAuthenticator<'a> {
 }
 
 #[cfg(feature = "gssapi")]
-impl<'a> Debug for GssapiAuthenticator<'a> {
+impl Debug for GssapiAuthenticator<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "GssapiAuthenticator")
     }
