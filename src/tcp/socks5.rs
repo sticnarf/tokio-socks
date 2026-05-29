@@ -295,12 +295,16 @@ where
     #[cfg(feature = "tokio")]
     /// Connect to the proxy server, authenticate and issue the SOCKS command
     pub async fn execute(&mut self) -> Result<Socks5Stream<TcpStream>> {
-        let next_addr = self.proxy.select_next_some().await?;
-        let tcp = TcpStream::connect(next_addr)
-            .await
-            .map_err(|_| Error::ProxyServerUnreachable)?;
+        while let Some(next_addr) = self.proxy.next().await {
+            let tcp = match TcpStream::connect(next_addr?).await {
+                Ok(tcp) => tcp,
+                Err(_) => continue,
+            };
 
-        self.execute_with_socket(tcp).await
+            return self.execute_with_socket(tcp).await;
+        }
+
+        Err(Error::ProxyServerUnreachable)
     }
 
     pub async fn execute_with_socket<T: AsyncSocket + Unpin>(&mut self, mut socket: T) -> Result<Socks5Stream<T>> {
@@ -650,7 +654,7 @@ where
     ///
     /// This should be forwarded to the remote process, which should open a
     /// connection to it.
-    pub fn bind_addr(&self) -> TargetAddr {
+    pub fn bind_addr(&self) -> TargetAddr<'_> {
         self.inner.target_addr()
     }
 
