@@ -1,6 +1,8 @@
+#[cfg(feature = "gssapi")]
+use async_trait::async_trait;
 use std::{
     borrow::Cow,
-    fmt,
+    fmt::{self, Debug},
     io::Result as IoResult,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     pin::Pin,
@@ -257,17 +259,61 @@ where
 /// Authentication methods
 #[derive(Debug)]
 enum Authentication<'a> {
-    Password { username: &'a str, password: &'a str },
+    Password {
+        username: &'a str,
+        password: &'a str,
+    },
+    #[cfg(feature = "gssapi")]
+    Gssapi {
+        gssapi_authenticator: GssapiAuthenticator<'a>,
+    },
     None,
+}
+
+#[cfg(feature = "gssapi")]
+pub struct GssapiAuthenticator<'a> {
+    gssapi_authenticator: &'a dyn GssapiAuthentication,
+    renegotiate_sec_token: bool,
+}
+
+#[cfg(feature = "gssapi")]
+impl<'a> GssapiAuthenticator<'a> {
+    pub fn new(gssapi_authenticator: &'a dyn GssapiAuthentication, renegotiate_sec_token: bool) -> Self {
+        GssapiAuthenticator {
+            gssapi_authenticator,
+            renegotiate_sec_token,
+        }
+    }
+}
+
+#[cfg(feature = "gssapi")]
+impl Debug for GssapiAuthenticator<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "GssapiAuthenticator")
+    }
 }
 
 impl Authentication<'_> {
     fn id(&self) -> u8 {
         match self {
             Authentication::Password { .. } => 0x02,
+            #[cfg(feature = "gssapi")]
+            Authentication::Gssapi { .. } => 0x01,
             Authentication::None => 0x00,
         }
     }
+}
+
+#[cfg(feature = "gssapi")]
+#[async_trait]
+pub trait GssapiAuthentication: Send + Sync {
+    // This method retrieves the security context token,
+    // server_challenge as None:    means return the first init_sec token
+    // server_challenge as Some(x): means return the resp for the servers challenge
+    async fn get_security_context(&self, server_challenge: Option<&[u8]>) -> std::result::Result<Vec<u8>, Error>;
+
+    // This method performs the subnegotiation step
+    async fn get_protection_level(&self) -> std::result::Result<Vec<u8>, Error>;
 }
 
 mod error;
